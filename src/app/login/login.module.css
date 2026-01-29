@@ -1,0 +1,247 @@
+
+.main {
+  min-height: 100vh;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: #1a1a1b;
+  position: relative;
+}
+
+.brand {
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
+.logoIcon {
+  width: 2rem;
+  height: 2rem;
+  background-color: #0052D9;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.brandText {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0052D9;
+  letter-spacing: -0.02em;
+}
+
+.container {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.subtitle {
+  color: #606266;
+  font-size: 1.125rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.labelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #606266;
+  padding-left: 0.125rem;
+}
+
+.forgotLink {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #0052D9;
+  text-decoration: none;
+}
+
+.forgotLink:hover {
+  text-decoration: underline;
+}
+
+.input {
+  width: 100%;
+  background-color: #f4f5f7;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  font-size: 1rem;
+  color: #1a1a1b;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.input::placeholder {
+  color: #909399;
+}
+
+.input:focus {
+  background-color: #ffffff;
+  border-color: #0052D9;
+  box-shadow: 0 0 0 4px rgba(0, 82, 217, 0.1);
+}
+
+.loginButton {
+  width: 100%;
+  background-color: #0052D9;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 1.125rem;
+  padding: 1rem;
+  border: none;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 82, 217, 0.2);
+  margin-top: 0.5rem;
+}
+
+.loginButton:hover {
+  background-color: #0042b3;
+  transform: translateY(-1px);
+}
+
+.loginButton:active {
+  transform: scale(0.98);
+}
+
+.dividerContainer {
+  position: relative;
+  height: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dividerLine {
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  background-color: #ebeef5;
+}
+
+.dividerText {
+  position: relative;
+  background-color: #ffffff;
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  color: #909399;
+}
+
+.socialButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  background-color: #ffffff;
+  border: 1px solid #dcdfe6;
+  border-radius: 0.75rem;
+  padding: 0.875rem;
+  font-weight: 500;
+  font-size: 1rem;
+  color: #1a1a1b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.socialButton:hover {
+  background-color: #f5f7fa;
+}
+
+.socialButton:active {
+  transform: scale(0.98);
+}
+
+.signupContainer {
+  text-align: center;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #606266;
+  padding-top: 1rem;
+}
+
+.signupLink {
+  color: #0052D9;
+  text-decoration: none;
+  margin-left: 0.25rem;
+}
+
+.signupLink:hover {
+  text-decoration: underline;
+}
+
+.footer {
+  position: absolute;
+  bottom: 2rem;
+  display: flex;
+  gap: 1.5rem;
+}
+
+.footerLink {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #909399;
+  text-decoration: none;
+}
+
+.footerLink:hover {
+  color: #606266;
+}
+
+@media (max-width: 640px) {
+  .brand {
+    top: 1.5rem;
+    left: 1.5rem;
+  }
+  .title {
+    font-size: 1.75rem;
+  }
+}

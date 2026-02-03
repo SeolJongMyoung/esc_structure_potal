@@ -30,15 +30,18 @@ export default function RCBeamAnalysisPage() {
             as_req: 0,
             as_used: 0,
             as_ratio: 0,
-            is_calculating: false
+            is_calculating: false,
+            selected: false
         }
     ]);
+
+    const [selectAll, setSelectAll] = useState(false);
 
     const handleAddRow = () => {
         setRows(prev => [
             ...prev,
             {
-                id: prev.length > 0 ? prev[prev.length - 1].id + 1 : 1,
+                id: prev.length > 0 ? Math.max(...prev.map(r => r.id)) + 1 : 1,
                 name: "",
                 Mu: 0, Vu: 0, Nu: 0, Ms: 0,
                 H: 0, B: 0, Dc: 80,
@@ -50,15 +53,38 @@ export default function RCBeamAnalysisPage() {
                 as_req: 0,
                 as_used: 0,
                 as_ratio: 0,
-                is_calculating: false
+                is_calculating: false,
+                selected: false
             }
         ]);
     };
 
     const handleDeleteRow = () => {
-        if (rows.length > 1) {
-            setRows(prev => prev.slice(0, -1));
+        const remainingRows = rows.filter(row => !row.selected);
+        if (remainingRows.length === 0 && rows.length > 0) {
+            // Keep at least one empty row if everything is deleted
+            setRows([{
+                id: 1, name: "", Mu: 0, Vu: 0, Nu: 0, Ms: 0, H: 0, B: 0, Dc: 80,
+                as_dia: 13, as_num: 0, av_dia: 16, av_leg: 0, av_space: 200,
+                as_req: 0, as_used: 0, as_ratio: 0, is_calculating: false, selected: false
+            }]);
+        } else {
+            setRows(remainingRows);
         }
+        setSelectAll(false);
+    };
+
+    const handleToggleSelectAll = () => {
+        const newState = !selectAll;
+        setSelectAll(newState);
+        setRows(prev => prev.map(row => ({ ...row, selected: newState })));
+    };
+
+    const handleToggleSelect = (index: number) => {
+        const newRows = [...rows];
+        newRows[index].selected = !newRows[index].selected;
+        setRows(newRows);
+        setSelectAll(newRows.every(row => row.selected));
     };
 
     const handleMaterialChange = (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
@@ -231,7 +257,10 @@ export default function RCBeamAnalysisPage() {
                             <table style={{ borderCollapse: 'collapse', fontSize: '12px', minWidth: '1800px' }}>
                                 <thead style={{ position: 'sticky', top: 0, zIndex: 20 }}>
                                     <tr style={{ backgroundColor: '#f2f2f2' }}>
-                                        <th style={{ border: '1px solid #ddd', padding: '8px', width: '40px' }}></th>
+                                        <th style={{ border: '1px solid #ddd', padding: '8px', width: '30px' }}>
+                                            <input type="checkbox" checked={selectAll} onChange={handleToggleSelectAll} style={{ cursor: 'pointer' }} />
+                                        </th>
+                                        <th style={{ border: '1px solid #ddd', padding: '8px', width: '40px' }}>No</th>
                                         <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '120px' }}>Name</th>
                                         <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Mu<br />(kN.m)</th>
                                         <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Vu<br />(kN)</th>
@@ -254,7 +283,10 @@ export default function RCBeamAnalysisPage() {
                                 </thead>
                                 <tbody>
                                     {rows.map((row, idx) => (
-                                        <tr key={row.id} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#fcfcfc' }}>
+                                        <tr key={row.id} style={{ backgroundColor: row.selected ? '#eff6ff' : (idx % 2 === 0 ? '#fff' : '#fcfcfc') }}>
+                                            <td style={{ border: '1px solid #eee', padding: '8px', textAlign: 'center' }}>
+                                                <input type="checkbox" checked={row.selected} onChange={() => handleToggleSelect(idx)} style={{ cursor: 'pointer' }} />
+                                            </td>
                                             <td style={{ border: '1px solid #eee', padding: '8px', textAlign: 'center', backgroundColor: '#f2f2f2', fontWeight: 'bold', color: '#666' }}>{row.id}</td>
                                             <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.name} onChange={(e) => handleRowChange(e, idx, 'name')} onKeyDown={(e) => handleKeyDown(e, idx, 0)} onFocus={handleFocus} data-row={idx} data-col={0} style={{ width: '100%', height: '35px', padding: '0 8px', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
                                             <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.Mu} onChange={(e) => handleRowChange(e, idx, 'Mu')} onKeyDown={(e) => handleKeyDown(e, idx, 1)} onFocus={handleFocus} data-row={idx} data-col={1} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
@@ -317,9 +349,18 @@ export default function RCBeamAnalysisPage() {
                             </button>
                             <button
                                 onClick={handleDeleteRow}
-                                style={{ padding: '6px 15px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '4px', fontSize: '13px', color: '#dc2626', cursor: 'pointer', fontWeight: 'bold' }}
+                                style={{
+                                    padding: '6px 15px',
+                                    backgroundColor: rows.some(r => r.selected) ? '#fee2e2' : '#fef2f2',
+                                    border: rows.some(r => r.selected) ? '1px solid #ef4444' : '1px solid #fecaca',
+                                    borderRadius: '4px',
+                                    fontSize: '13px',
+                                    color: rows.some(r => r.selected) ? '#b91c1c' : '#dc2626',
+                                    cursor: 'pointer',
+                                    fontWeight: 'bold'
+                                }}
                             >
-                                - Delete Row
+                                - Delete Selected Rows
                             </button>
                         </div>
                     </section>

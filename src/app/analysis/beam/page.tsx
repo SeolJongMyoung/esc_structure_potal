@@ -188,10 +188,41 @@ export default function RCBeamAnalysisPage() {
         }
     };
 
+    const handleExport = async () => {
+        const selectedRows = rows.filter(row => row.selected);
+        if (selectedRows.length === 0) {
+            alert("엑셀로 내보낼 행을 먼저 선택해주세요.");
+            return;
+        }
+
+        try {
+            const response = await fetch("/api/analysis/beam/export", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ material, rows: selectedRows })
+            });
+
+            if (!response.ok) throw new Error("Export failed");
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `RC_Beam_Report_${new Date().getTime()}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error("Export Error:", error);
+            alert("엑셀 내보내기 중 오류가 발생했습니다.");
+        }
+    };
+
     const toolbarButtons = [
         { label: "Calc", icon: "📊", onClick: handleCalculate },
-        { label: "View", icon: "👁️" },
-        { label: "Export", icon: "📄" }
+        { label: "Export", icon: "📄", onClick: handleExport },
+        { label: "View", icon: "👁️", onClick: () => alert("View mode not implemented yet") }
     ];
 
     return (

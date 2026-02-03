@@ -1,70 +1,78 @@
 import AnalysisCard from "@/components/AnalysisCard";
 
 export default function DashboardPage() {
+    const FolderIcon = (
+        <svg style={{ width: '80px', height: '80px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+    );
+
     const tools = [
         {
-            title: "보 해석 (Beam Analysis)",
-            description: "단순보, 연속보 등 다양한 보 구조물의 휨 모멘트 및 전단력을 계산합니다.",
+            title: "보 하중 계산 (Beam Load)",
+            description: "단순보, 연속보 등 다양한 보 구조물의 하중 및 모멘트를 계산합니다.",
             href: "/analysis/beam",
-            icon: (
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
-                </svg>
-            ),
+            icon: FolderIcon,
         },
         {
             title: "기둥 해석 (Column Analysis)",
             description: "축하중과 모멘트를 받는 기둥의 안정성 및 단면 설계를 수행합니다.",
             href: "/analysis/column",
-            icon: (
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
-                </svg>
-            ),
+            icon: FolderIcon,
         },
         {
             title: "슬래브 해석 (Slab Analysis)",
             description: "1방향 및 2방향 슬래브의 하중 분배와 철근 배근을 계산합니다.",
             href: "/analysis/slab",
-            icon: (
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-            ),
+            icon: FolderIcon,
         },
         {
             title: "기초 해석 (Foundation Analysis)",
             description: "독립기초, 복합기초 등 다양한 기초 형식의 지지력과 침하를 검토합니다.",
             href: "/analysis/foundation",
-            icon: (
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-            ),
+            icon: FolderIcon,
         },
     ];
 
     return (
-        <main className="min-h-screen p-4 md:p-8 relative">
-            {/* Background Elements */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-                <div className="absolute top-[-20%] left-[20%] w-[60%] h-[60%] bg-blue-900/10 rounded-full blur-[150px]" />
+        <main style={{ minHeight: '100vh', position: 'relative', backgroundColor: '#020617', color: '#e2e8f0', WebkitFontSmoothing: 'antialiased' }}>
+            {/* Premium Background System */}
+            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', zIndex: -1, pointerEvents: 'none' }}>
+                {/* Mesh Gradients */}
+                <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '40%', height: '40%', backgroundColor: 'rgba(37, 99, 235, 0.2)', borderRadius: '50%', filter: 'blur(120px)' }} />
+                <div style={{ position: 'absolute', bottom: '10%', right: '-5%', width: '35%', height: '35%', backgroundColor: 'rgba(217, 119, 6, 0.1)', borderRadius: '50%', filter: 'blur(100px)' }} />
+                <div style={{ position: 'absolute', top: '20%', right: '10%', width: '25%', height: '25%', backgroundColor: 'rgba(79, 70, 229, 0.15)', borderRadius: '50%', filter: 'blur(80px)' }} />
+
+                {/* Engineering Dot Pattern Overlay */}
+                <div style={{ position: 'absolute', inset: 0, opacity: 0.15, backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '1.5rem 1.5rem' }} />
+
+                {/* Subtle Grid Lines */}
+                <div style={{ position: 'absolute', inset: 0, opacity: 0.05, backgroundImage: 'linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)', backgroundSize: '5rem 5rem' }} />
             </div>
 
-            <div className="container mx-auto space-y-8">
-                <header className="flex justify-between items-center py-4 border-b border-white/5">
-                    <div>
-                        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-                        <p className="text-slate-400 text-sm">안녕하세요, 엔지니어님</p>
+            <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '3rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '3rem', position: 'relative', zIndex: 10 }}>
+                <header className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2rem', borderRadius: '1.5rem', border: '1px solid rgba(255, 255, 255, 0.1)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                            <span style={{ padding: '0.125rem 0.5rem', borderRadius: '0.25rem', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', fontSize: '10px', fontWeight: 'bold', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Premium Portal</span>
+                            <h1 style={{ fontSize: '1.875rem', fontWeight: '900', color: 'white', margin: 0, letterSpacing: '-0.025em' }}>ENGINX <span style={{ color: '#f59e0b' }}>DASHBOARD</span></h1>
+                        </div>
+                        <p style={{ color: '#94a3b8', fontSize: '1.125rem', fontWeight: '500', opacity: 0.8, margin: 0 }}>성공적인 설계를 기원합니다, <span style={{ color: '#f8fafc', fontStyle: 'italic' }}>Seol JongMyoung</span> 엔지니어님</p>
                     </div>
-                    <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold">
-                        E
+                    <div style={{ position: 'relative' }}>
+                        <div style={{ width: '3.5rem', height: '3.5rem', borderRadius: '50%', background: 'linear-gradient(to bottom right, #fbbf24, #d97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a', fontSize: '1.25rem', fontWeight: '900', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', position: 'relative', zIndex: 1, border: '2px solid rgba(255, 255, 255, 0.2)' }}>
+                            E
+                        </div>
                     </div>
                 </header>
 
-                <section>
-                    <h2 className="text-xl font-semibold text-white mb-6">구조 해석 도구</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <section style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{ height: '2rem', width: '4px', backgroundColor: '#f59e0b', borderRadius: '2px' }} />
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'white', margin: 0, letterSpacing: '-0.025em' }}>구조 해석 엔지니어링 도구</h2>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '2rem' }}>
                         {tools.map((tool) => (
                             <AnalysisCard key={tool.href} {...tool} />
                         ))}

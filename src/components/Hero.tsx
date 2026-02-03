@@ -15,7 +15,7 @@ export default function Hero() {
                         Run complex analysis, design checks, and manage your projects from anywhere.
                     </p>
                     <div className={styles.actions}>
-                        <Link href="/signup" className={styles.ctaBtn}>
+                        <Link href="/dashboard" className={styles.ctaBtn}>
                             Get Started for Free
                         </Link>
                         <Link href="/demo" className={styles.secondaryBtn}>

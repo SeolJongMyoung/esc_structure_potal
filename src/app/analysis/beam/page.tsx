@@ -11,29 +11,55 @@ export default function RCBeamAnalysisPage() {
         phi_v: 0.85
     });
 
-    const [rows, setRows] = useState(
-        Array(20).fill(null).map((_, i) => ({
-            id: i + 1,
-            name: i === 0 ? "Center" : "",
-            Mu: i === 0 ? 1000 : 0,
-            Vu: i === 0 ? 50 : 0,
-            Nu: i === 0 ? 5 : 0,
-            Ms: i === 0 ? 80 : 0,
-            H: i === 0 ? 800 : 0,
-            B: i === 0 ? 1000 : 0,
-            Dc: i === 0 ? 80 : 0,
-            as_dia: i === 0 ? 25 : 13,
-            as_num: i === 0 ? 8 : 0,
-            delta: "1",
+    const [rows, setRows] = useState([
+        {
+            id: 1,
+            name: "Center",
+            Mu: 1000,
+            Vu: 50,
+            Nu: 5,
+            Ms: 80,
+            H: 800,
+            B: 1000,
+            Dc: 80,
+            as_dia: 25,
+            as_num: 8,
             av_dia: 16,
-            av_leg: i === 0 ? 2 : 0,
-            av_space: i === 0 ? 400 : 0,
+            av_leg: 2,
+            av_space: 400,
             as_req: 0,
             as_used: 0,
             as_ratio: 0,
             is_calculating: false
-        }))
-    );
+        }
+    ]);
+
+    const handleAddRow = () => {
+        setRows(prev => [
+            ...prev,
+            {
+                id: prev.length > 0 ? prev[prev.length - 1].id + 1 : 1,
+                name: "",
+                Mu: 0, Vu: 0, Nu: 0, Ms: 0,
+                H: 0, B: 0, Dc: 80,
+                as_dia: 13,
+                as_num: 0,
+                av_dia: 16,
+                av_leg: 0,
+                av_space: 200,
+                as_req: 0,
+                as_used: 0,
+                as_ratio: 0,
+                is_calculating: false
+            }
+        ]);
+    };
+
+    const handleDeleteRow = () => {
+        if (rows.length > 1) {
+            setRows(prev => prev.slice(0, -1));
+        }
+    };
 
     const handleMaterialChange = (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
         setMaterial(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }));
@@ -279,6 +305,22 @@ export default function RCBeamAnalysisPage() {
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+
+                        {/* Row Control Buttons */}
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                            <button
+                                onClick={handleAddRow}
+                                style={{ padding: '6px 15px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '4px', fontSize: '13px', color: '#16a34a', cursor: 'pointer', fontWeight: 'bold' }}
+                            >
+                                + Add Row
+                            </button>
+                            <button
+                                onClick={handleDeleteRow}
+                                style={{ padding: '6px 15px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '4px', fontSize: '13px', color: '#dc2626', cursor: 'pointer', fontWeight: 'bold' }}
+                            >
+                                - Delete Row
+                            </button>
                         </div>
                     </section>
                 </div>

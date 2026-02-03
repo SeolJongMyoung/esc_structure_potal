@@ -25,9 +25,9 @@ export default function AnalysisCard({ title, description, href, icon }: Analysi
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        <h3 style={{ fontSize: '1.5rem', fontWeight: '900', color: 'white', transition: 'color 0.3s', margin: 0, letterSpacing: '-0.025em' }}>{title}</h3>
-                        <div style={{ width: '3rem', height: '4px', backgroundColor: 'rgba(245, 158, 11, 0.2)', margin: '0 auto', borderRadius: '9999px', transition: 'all 0.5s' }} />
-                        <p style={{ color: '#94a3b8', fontSize: '1rem', lineHeight: '1.6', fontWeight: '500', opacity: 0.8, margin: 0 }}>{description}</p>
+                        <h3 style={{ fontSize: '1.5rem', fontWeight: '900', color: '#1e293b', transition: 'color 0.3s', margin: 0, letterSpacing: '-0.025em' }} className="group-hover:text-amber-600">{title}</h3>
+                        <div style={{ width: '3rem', height: '4px', backgroundColor: 'rgba(245, 158, 11, 0.4)', margin: '0 auto', borderRadius: '9999px', transition: 'all 0.5s' }} />
+                        <p style={{ color: '#475569', fontSize: '1rem', lineHeight: '1.6', fontWeight: '500', margin: 0 }}>{description}</p>
                     </div>
 
                     {/* Action Hint */}

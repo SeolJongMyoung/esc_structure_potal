@@ -407,22 +407,32 @@ class CalcReinfoeceConcrete:
         flexure_all.extend(sec6); flexure_all.append("")
         flexure_all.extend(sec7)
 
-        # 8) 전단력 검토
+        # 8/10) 전단력 검토 (이미지 템플릿 기반 상세 버전)
         shear = []
-        shear.append("=" * 75)
-        shear.append(f"{'전단력 검토':^75}")
-        shear.append("=" * 75)
-        shear.append("")
-        shear.append(f"Φ Vc = Φv x √fck x b x d / 6")
-        shear.append(f"    = {self.pi_v:.2f} x √{self.f_ck} x {self.beam_b} x {self.d_eff_v:.1f} / 6 = {self.pi_V_c:.1f} N")
+        shear.append("10) 전단검토")
+        shear.append(f"  \u03a6 Vc = \u03a6v x \u221afck x b x d / 6")
+        shear.append(f"     = {self.pi_v:.2f} x \u221a{self.f_ck:.1f} x {self.beam_b:.1f} x {self.d_eff_v:.1f} / 6 = {self.pi_V_c:.1f} N")
+        
         if self.pi_V_c >= self.Vu_n:
-            shear.append(f"Φ Vc ≥ Vu = {self.Vu_n:.1f} N  ∴ 전단보강 불필요")
+            shear.append(f"  \u03a6 Vc \u2265 Vu = {self.Vu_n:.1f} N  \u2234 전단보강 불필요")
         else:
-            shear.append(f"Φ Vc < Vu = {self.Vu_n:.1f} N  ∴ 전단보강 필요")
-            shear.append(f"Av_req = {self.av_req:.3f} mm²")
-            shear.append(f"Av_use = {self.av_use:.3f} mm² (D{self.av_dia}, {self.av_leg}EA, @{self.av_space})")
+            shear.append(f"  \u03a6 Vc < Vu = {self.Vu_n:.1f} N  \u2234 전단보강 필요")
+            shear.append("")
+            shear.append(f"  Av_req = ( {self.Vu_n/1e3:.3f} - {self.pi_V_c/1e3:.3f} ) x {self.av_space:.1f} / ( {self.f_y:.1f} x {self.d_eff_v:.1f} x {self.pi_v:.2f})")
+            shear.append(f"         = {self.av_req:.3f} mm\u00b2")
+            shear.append(f"  Av_use = {self.av_use:.3f} mm\u00b2  ( {self.rebar_id}{self.av_dia} - {self.av_leg}EA,  C.T.C {self.av_space:.1f} mm )")
+            
+            res_space = "O.K" if self.av_space <= self.av_space_min else "N.G"
+            shear.append(f"  사용간격 {self.av_space:.1f} mm > 최소간격 = min(60cm, 0.5D) = {self.av_space_min:.3f}  \u2234 {res_space}")
+            shear.append("")
+            shear.append(f"  Vs = {self.av_use:.3f} x {self.f_y:.1f} x {self.d_eff_v:.1f} / {self.av_space:.1f} = {self.V_s:.1f} N")
+            shear.append(f"  Vs_max = 2 x \u221a{self.f_ck:.1f} / 3 x {self.beam_b:.1f} x {self.d_eff_v:.1f}")
+            res_vmax = "O.K" if self.V_s <= self.V_s_max else "N.G"
+            shear.append(f"         = {self.V_s_max:.1f} N \u2264 Vs = {self.V_s:.1f} N  \u2234 {res_vmax}")
+            
             res_v = "O.K" if self.pi_V_n >= self.Vu_n else "N.G"
-            shear.append(f"Φ Vn = {self.pi_V_n:.1f} N ───> {res_v} (Vu = {self.Vu_n:.1f} N)")
+            op_v = "≥" if self.pi_V_n >= self.Vu_n else "<"
+            shear.append(f"  \u03a6 Vn = {self.pi_v:.2f} x ( {self.V_c:.1f} + {self.V_s:.1f} ) = {self.pi_V_n:.3f} N {op_v} Vu = {self.Vu_n:.1f} N  \u2234 {res_v}")
 
         # 9) 사용성(균열) 검토 (이미지 템플릿 기반 상세 버전)
         service = []

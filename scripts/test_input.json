@@ -1,0 +1,25 @@
+{
+    "mode": "calc",
+    "material": {
+        "fck": 35,
+        "fy": 400,
+        "phi_s": 0.85,
+        "phi_v": 0.75
+    },
+    "rows": [
+        {
+            "name": "Test Beam 1",
+            "Mu": 100,
+            "Vu": 50,
+            "Ms": 60,
+            "H": 600,
+            "B": 400,
+            "Dc": 80,
+            "as_dia": 25,
+            "as_num": 4,
+            "av_dia": 10,
+            "av_leg": 2,
+            "av_space": 200
+        }
+    ]
+}

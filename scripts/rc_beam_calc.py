@@ -3,6 +3,7 @@ import json
 import math
 from civil_usd_materials import ConcMaterial, RebarMaterial
 from rebar_area_ks import KoreanRebar
+from standards import get_standard
 
 class CalcReinfoeceConcrete:
     def __init__(self, data):
@@ -13,8 +14,13 @@ class CalcReinfoeceConcrete:
 
         self.f_ck = float(mat.get("fck", 35))
         self.f_y = float(mat.get("fy", 400))
-        self.pi_f = float(mat.get("phi_s", 0.85)) # Base Øf
-        self.pi_v = float(mat.get("phi_v", 0.75)) # Øv (Usually 0.75 for USD)
+        
+        # Design Standard Selection
+        self.standard_name = data.get("design_standard", "강도설계법(도로교 설계기준, 2010)")
+        self.standard = get_standard(self.standard_name)
+        
+        self.pi_f = float(mat.get("phi_s", 0.85)) # Base Øf (will be overridden by standard)
+        self.pi_v = self.standard.get_phi_v()
         
         self.con_material = ConcMaterial(f_ck=self.f_ck)
         self.rebar_material = RebarMaterial(f_y=self.f_y)
@@ -58,10 +64,7 @@ class CalcReinfoeceConcrete:
         if self.beam_h <= 0 or self.beam_b <= 0 or self.d_eff <= 0:
             self.as_req = 0; self.M_r = 0; self.M_sf = 0; return
 
-        if self.f_ck <= 28:
-            self.beta_1 = 0.85
-        else:
-            self.beta_1 = max(0.65, 0.85 - (self.f_ck - 28) * 0.007)
+        self.beta_1 = self.standard.get_beta_1(self.f_ck)
 
         # Tension behavior
         self.tension_force = self.as_use * self.f_y
@@ -72,16 +75,7 @@ class CalcReinfoeceConcrete:
         self.epsilon_y = self.f_y / self.E_s
         self.epsilon_t = 0.003 * (self.dt - self.c) / self.c if self.c > 0 else 0
 
-        # Strength reduction factor interpolation
-        if self.epsilon_t >= 0.005:
-            self.pi_f_r = 0.85
-            self.epsilon_t_result = "인장지배단면"
-        elif self.epsilon_t <= self.epsilon_y:
-            self.pi_f_r = 0.65
-            self.epsilon_t_result = "압축지배단면"
-        else:
-            self.pi_f_r = 0.65 + (0.85 - 0.65) * (self.epsilon_t - self.epsilon_y) / (0.005 - self.epsilon_y)
-            self.epsilon_t_result = "변화구역단면"
+        self.pi_f_r, self.epsilon_t_result = self.standard.get_phi_f(self.epsilon_t, self.epsilon_y)
 
         # Required Rebar (Quadratic solver)
         K_fy = self.f_y / (2 * 0.85 * self.f_ck * self.beam_b) if self.f_ck * self.beam_b > 0 else 0
@@ -139,15 +133,8 @@ class CalcReinfoeceConcrete:
         self.cr_index = self.crack_case
         self.c_c = self.dc_1 - self.as_dia1 / 2
         
-        # k_cr based on environment (k_cr = factor)
-        if self.crack_case == "건조한 환경":
-            self.k_cr = 250 # Kcr = 250
-        elif self.crack_case == "부식성 환경":
-            self.k_cr = 170 # Kcr = 170
-        elif self.crack_case == "극심한 부식성 환경":
-            self.k_cr = 150 # Kcr = 150
-        else: # 일반환경
-            self.k_cr = 210 # Kcr = 210
+        # k_cr based on standard and environment
+        self.k_cr = self.standard.get_k_cr(self.crack_case)
             
         self.s_min_1 = 375 * (self.k_cr / self.f_s) - 2.5 * self.c_c if self.f_s > 0 else 999
         self.s_min_2 = 300 * (self.k_cr / self.f_s) if self.f_s > 0 else 999
@@ -331,6 +318,14 @@ class CalcReinfoeceConcrete:
     def generate_text_report(self):
         self.calculate()
         
+        # Header with Design Standard
+        header = []
+        header.append("=" * 75)
+        header.append(f"{self.standard.name:^75}")
+        header.append(f"{'강도설계법(USD)에 의한 휨모멘트 검토':^75}")
+        header.append("=" * 75)
+        header.append("")
+
         # 1) 단면제원 및 설계가정
         sec1 = []
         sec1.append("1) 단면제원 및 설계가정")
@@ -408,10 +403,7 @@ class CalcReinfoeceConcrete:
 
         # Combined Flexure (for total or tab)
         flexure_all = []
-        flexure_all.append("=" * 75)
-        flexure_all.append(f"{'강도설계법(USD)에 의한 휨모멘트 검토':^75}")
-        flexure_all.append("=" * 75)
-        flexure_all.append("")
+        flexure_all.extend(header)
         flexure_all.extend(sec1); flexure_all.append("")
         flexure_all.extend(sec2); flexure_all.append("")
         flexure_all.extend(sec3); flexure_all.append("")
@@ -450,6 +442,7 @@ class CalcReinfoeceConcrete:
         # 9) 사용성(균열) 검토 (이미지 템플릿 기반 상세 버전)
         service = []
         service.append("=" * 75)
+        service.append(f"{self.standard.name:^75}")
         service.append(f"{'사용성(균열) 검토':^75}")
         service.append("=" * 75)
         service.append("")
@@ -500,6 +493,7 @@ if __name__ == "__main__":
         input_data = json.loads(sys.stdin.read())
         mode = input_data.get("mode", "calc") # 'calc', 'export', or 'report'
         material = input_data.get("material", {})
+        design_standard = input_data.get("design_standard", "강도설계법(도로교 설계기준, 2010)")
         
         if mode == "export":
             # Export mode: generate a single excel with multiple sheets
@@ -512,7 +506,7 @@ if __name__ == "__main__":
             wb.remove(wb.active)
             
             for i, row in enumerate(input_data.get("rows", [])):
-                calc = CalcReinfoeceConcrete({"material": material, "row": row})
+                calc = CalcReinfoeceConcrete({"material": material, "row": row, "design_standard": design_standard})
                 sheet_name = row.get('name') if row.get('name') else f"Beam_{row.get('id', i+1)}"
                 # Sheet names are limited to 31 chars
                 calc.add_to_excel_workbook(wb, sheet_name[:31])
@@ -528,13 +522,13 @@ if __name__ == "__main__":
             if not rows:
                 print(json.dumps({"error": "No rows provided"}, ensure_ascii=False))
             else:
-                calc = CalcReinfoeceConcrete({"material": material, "row": rows[0]})
+                calc = CalcReinfoeceConcrete({"material": material, "row": rows[0], "design_standard": design_standard})
                 print(json.dumps(calc.generate_text_report(), ensure_ascii=False))
         else:
             # Standard calculation mode
             results = []
             for row in input_data.get("rows", []):
-                calc = CalcReinfoeceConcrete({"material": material, "row": row})
+                calc = CalcReinfoeceConcrete({"material": material, "row": row, "design_standard": design_standard})
                 results.append(calc.calculate())
             print(json.dumps(results, ensure_ascii=False))
             

@@ -51,6 +51,9 @@ class CalcReinfoeceConcrete:
         self.av_leg = float(row.get("av_leg", 0))
         self.av_space = float(row.get("av_space", 200))
 
+        # Crack control environment
+        self.crack_case = row.get("crack_case", "일반환경").strip()
+
     def calc_moment(self):
         if self.beam_h <= 0 or self.beam_b <= 0 or self.d_eff <= 0:
             self.as_req = 0; self.M_r = 0; self.M_sf = 0; return
@@ -133,9 +136,19 @@ class CalcReinfoeceConcrete:
         self.f_s = self.Ms_nm / (self.as_use * (self.d_eff - self.chi_o / 3)) if self.as_use > 0 else 0
         
         # Crack control Sa
-        self.cr_index = "보통" # Placeholder
+        self.cr_index = self.crack_case
         self.c_c = self.dc_1 - self.as_dia1 / 2
-        self.k_cr = 210 # Kcr = 210 (보통), 170 (매우심함)
+        
+        # k_cr based on environment (k_cr = factor)
+        if self.crack_case == "건조한 환경":
+            self.k_cr = 250 # Kcr = 250
+        elif self.crack_case == "부식성 환경":
+            self.k_cr = 170 # Kcr = 170
+        elif self.crack_case == "극심한 부식성 환경":
+            self.k_cr = 150 # Kcr = 150
+        else: # 일반환경
+            self.k_cr = 210 # Kcr = 210
+            
         self.s_min_1 = 375 * (self.k_cr / self.f_s) - 2.5 * self.c_c if self.f_s > 0 else 999
         self.s_min_2 = 300 * (self.k_cr / self.f_s) if self.f_s > 0 else 999
         self.s_min = min(self.s_min_1, self.s_min_2)
@@ -302,7 +315,7 @@ class CalcReinfoeceConcrete:
         wsout['D67'].value =f"      1단 : {self.rebar_id}{self.as_dia1} - {self.as_num1:.1f} EA, 2단 : {self.rebar_id}{self.as_dia2} - {self.as_num2:.1f} EA, 3단 : {self.rebar_id}{self.as_dia3} - {self.as_num3:.1f} EA )"
         
         wsout['C69'].value =f"② 철근의 최대 중심간격"
-        wsout['D70'].value =f"강재의 부식에 대한 환경조건은 『 {self.cr_index} 』 적용"
+        wsout['D70'].value =f"강재의 부식에 대한 환경조건은 『 {self.crack_case} 』 적용"
         wsout['D71'].value =f"Cc = {self.dc_1:.1f} - {self.as_dia1} / 2 = {self.c_c:.2f} mm"
         wsout['D72'].value =f"여기서 Cc ; 인장철근이나 긴장재의 표면과 콘크리트 표면사이의 두께(mm)"
         wsout['D74'].value =f"Smin : 375 x (Kcr / fs) - 2.5 x Cc = 375 x ({self.k_cr} / {self.f_s:.3f}) - 2.5 x {self.c_c:.3f} = {self.s_min_1:.3f} mm"
@@ -450,8 +463,8 @@ class CalcReinfoeceConcrete:
         service.append(f"    사용철근량 = {self.as_use:.3f} mm\u00b2  (최외단 철근도심 : {self.dc_1:.1f} mm)")
         service.append(f"      1단 : D {self.as_dia1} - {self.as_num1} EA, 2단 : D {self.as_dia2} - {self.as_num2} EA, 3단 : D {self.as_dia3} - {self.as_num3} EA )")
         service.append("")
-        service.append("  \u2461 철근의 최대 중심간격")
-        service.append(f"    강재의 부식에 대한 환경조건은 \u300e {self.cr_index} \u300f 적용")
+        service.append("  ② 철근의 최대 중심간격")
+        service.append(f"    강재의 부식에 대한 환경조건은 『 {self.crack_case} 』 적용")
         service.append(f"    Cc = {self.dc_1:.1f} - {self.as_dia1} / 2 = {self.c_c:.2f} mm")
         service.append("    여기서 Cc ; 인장철근이나 긴장재의 표면과 콘크리트 표면사이의 두께(mm)")
         service.append("")
@@ -478,6 +491,12 @@ class CalcReinfoeceConcrete:
 
 if __name__ == "__main__":
     try:
+        # Use UTF-8 for stdin/stdout on Windows
+        if sys.platform == "win32":
+            import io
+            sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
         input_data = json.loads(sys.stdin.read())
         mode = input_data.get("mode", "calc") # 'calc', 'export', or 'report'
         material = input_data.get("material", {})
@@ -502,22 +521,22 @@ if __name__ == "__main__":
             out_path = os.path.join(temp_dir, "Calc_As_Output.xlsx")
             wb.save(out_path)
             wb.close()
-            print(json.dumps({"success": True, "file": out_path}))
+            print(json.dumps({"success": True, "file": out_path}, ensure_ascii=False))
         elif mode == "report":
             # Report mode: generate text for a single row
             rows = input_data.get("rows", [])
             if not rows:
-                print(json.dumps({"error": "No rows provided"}))
+                print(json.dumps({"error": "No rows provided"}, ensure_ascii=False))
             else:
                 calc = CalcReinfoeceConcrete({"material": material, "row": rows[0]})
-                print(json.dumps(calc.generate_text_report()))
+                print(json.dumps(calc.generate_text_report(), ensure_ascii=False))
         else:
             # Standard calculation mode
             results = []
             for row in input_data.get("rows", []):
                 calc = CalcReinfoeceConcrete({"material": material, "row": row})
                 results.append(calc.calculate())
-            print(json.dumps(results))
+            print(json.dumps(results, ensure_ascii=False))
             
     except Exception as e:
-        print(json.dumps([{"error": str(e)}]))
+        print(json.dumps([{"error": str(e)}], ensure_ascii=False))

@@ -8,7 +8,7 @@ export default function RCBeamAnalysisPage() {
         fck: 35,
         fy: 400,
         phi_f: 0.85,
-        phi_v: 0.85
+        phi_v: 0.75
     });
 
     const [rows, setRows] = useState([
@@ -24,6 +24,7 @@ export default function RCBeamAnalysisPage() {
             Dc: 80,
             as_dia: 25,
             as_num: 8,
+            crack_case: "일반환경",
             av_dia: 16,
             av_leg: 2,
             av_space: 400,
@@ -50,6 +51,7 @@ export default function RCBeamAnalysisPage() {
                 H: 0, B: 0, Dc: 80,
                 as_dia: 13,
                 as_num: 0,
+                crack_case: "일반환경",
                 av_dia: 16,
                 av_leg: 0,
                 av_space: 200,
@@ -71,7 +73,7 @@ export default function RCBeamAnalysisPage() {
             // Keep at least one empty row if everything is deleted
             setRows([{
                 id: 1, name: "", Mu: 0, Vu: 0, Nu: 0, Ms: 0, H: 0, B: 0, Dc: 80,
-                as_dia: 13, as_num: 0, av_dia: 16, av_leg: 0, av_space: 200,
+                as_dia: 13, as_num: 0, crack_case: "일반환경", av_dia: 16, av_leg: 0, av_space: 200,
                 as_req: 0, as_used: 0, as_ratio: 0, Mr: 0, fs: 0,
                 is_calculating: false, is_calculated: false, selected: false
             }]);
@@ -110,7 +112,7 @@ export default function RCBeamAnalysisPage() {
 
     const handleRowChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>, index: number, key: string) => {
         let value: string | number;
-        if (key === 'name') {
+        if (key === 'name' || key === 'crack_case') {
             value = e.target.value;
         } else {
             const val = e.target.value;
@@ -129,7 +131,8 @@ export default function RCBeamAnalysisPage() {
                     ...row,
                     [key]: value,
                     is_calculated: isNameChange ? row.is_calculated : false,
-                    // Clear results if it's not a name change
+                    // Clear results if it's not a name or crack_case change? 
+                    // Actually, crack_case change SHOULD reset results because it affects calculation.
                     as_req: isNameChange ? row.as_req : 0,
                     as_used: isNameChange ? row.as_used : 0,
                     as_ratio: isNameChange ? row.as_ratio : 0,
@@ -492,6 +495,7 @@ export default function RCBeamAnalysisPage() {
                                         <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>H<br />(mm)</th>
                                         <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>B<br />(mm)</th>
                                         <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Dc<br />(mm)</th>
+                                        <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '130px' }}>환경조건</th>
                                         <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '100px' }}>As_Dia<br />(mm)</th>
                                         <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>As_Num<br />(EA)</th>
                                         <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '100px' }}>Av_Dia<br />(mm)</th>
@@ -520,7 +524,15 @@ export default function RCBeamAnalysisPage() {
                                             <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.B} onChange={(e) => handleRowChange(e, idx, 'B')} onKeyDown={(e) => handleKeyDown(e, idx, 6)} onFocus={handleFocus} data-row={idx} data-col={6} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
                                             <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.Dc} onChange={(e) => handleRowChange(e, idx, 'Dc')} onKeyDown={(e) => handleKeyDown(e, idx, 7)} onFocus={handleFocus} data-row={idx} data-col={7} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
                                             <td style={{ border: '1px solid #eee', padding: '0' }}>
-                                                <select value={row.as_dia} onChange={(e) => handleRowChange(e, idx, 'as_dia')} onKeyDown={(e) => handleKeyDown(e, idx, 8)} onFocus={handleSelectFocus} data-row={idx} data-col={8} style={{ width: '100%', height: '35px', border: 'none', outline: 'none', backgroundColor: 'transparent', textAlignLast: 'center', cursor: 'pointer' }}>
+                                                <select value={row.crack_case} onChange={(e) => handleRowChange(e, idx, 'crack_case')} onKeyDown={(e) => handleKeyDown(e, idx, 8)} onFocus={handleSelectFocus} data-row={idx} data-col={8} style={{ width: '100%', height: '35px', border: 'none', outline: 'none', backgroundColor: 'transparent', textAlignLast: 'center', cursor: 'pointer', fontSize: '11px' }}>
+                                                    <option value="건조한 환경">건조한 환경</option>
+                                                    <option value="일반환경">일반환경</option>
+                                                    <option value="부식성 환경">부식성 환경</option>
+                                                    <option value="극심한 부식성 환경">극심한 부식성 환경</option>
+                                                </select>
+                                            </td>
+                                            <td style={{ border: '1px solid #eee', padding: '0' }}>
+                                                <select value={row.as_dia} onChange={(e) => handleRowChange(e, idx, 'as_dia')} onKeyDown={(e) => handleKeyDown(e, idx, 9)} onFocus={handleSelectFocus} data-row={idx} data-col={9} style={{ width: '100%', height: '35px', border: 'none', outline: 'none', backgroundColor: 'transparent', textAlignLast: 'center', cursor: 'pointer' }}>
                                                     <option value="10">10</option>
                                                     <option value="13">13</option>
                                                     <option value="16">16</option>
@@ -532,9 +544,9 @@ export default function RCBeamAnalysisPage() {
                                                     <option value="35">35</option>
                                                 </select>
                                             </td>
-                                            <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.as_num} onChange={(e) => handleRowChange(e, idx, 'as_num')} onKeyDown={(e) => handleKeyDown(e, idx, 9)} onFocus={handleFocus} data-row={idx} data-col={9} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
+                                            <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.as_num} onChange={(e) => handleRowChange(e, idx, 'as_num')} onKeyDown={(e) => handleKeyDown(e, idx, 10)} onFocus={handleFocus} data-row={idx} data-col={10} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
                                             <td style={{ border: '1px solid #eee', padding: '0' }}>
-                                                <select value={row.av_dia} onChange={(e) => handleRowChange(e, idx, 'av_dia')} onKeyDown={(e) => handleKeyDown(e, idx, 10)} onFocus={handleSelectFocus} data-row={idx} data-col={10} style={{ width: '100%', height: '35px', border: 'none', outline: 'none', backgroundColor: 'transparent', textAlignLast: 'center', cursor: 'pointer' }}>
+                                                <select value={row.av_dia} onChange={(e) => handleRowChange(e, idx, 'av_dia')} onKeyDown={(e) => handleKeyDown(e, idx, 11)} onFocus={handleSelectFocus} data-row={idx} data-col={11} style={{ width: '100%', height: '35px', border: 'none', outline: 'none', backgroundColor: 'transparent', textAlignLast: 'center', cursor: 'pointer' }}>
                                                     <option value="10">10</option>
                                                     <option value="13">13</option>
                                                     <option value="16">16</option>
@@ -549,8 +561,8 @@ export default function RCBeamAnalysisPage() {
                                                     <option value="51">51</option>
                                                 </select>
                                             </td>
-                                            <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.av_leg} onChange={(e) => handleRowChange(e, idx, 'av_leg')} onKeyDown={(e) => handleKeyDown(e, idx, 11)} onFocus={handleFocus} data-row={idx} data-col={11} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
-                                            <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.av_space} onChange={(e) => handleRowChange(e, idx, 'av_space')} onKeyDown={(e) => handleKeyDown(e, idx, 12)} onFocus={handleFocus} data-row={idx} data-col={12} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
+                                            <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.av_leg} onChange={(e) => handleRowChange(e, idx, 'av_leg')} onKeyDown={(e) => handleKeyDown(e, idx, 12)} onFocus={handleFocus} data-row={idx} data-col={12} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
+                                            <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.av_space} onChange={(e) => handleRowChange(e, idx, 'av_space')} onKeyDown={(e) => handleKeyDown(e, idx, 13)} onFocus={handleFocus} data-row={idx} data-col={13} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
                                             <td style={{ border: '1px solid #eee', padding: '8px', textAlign: 'right', backgroundColor: '#f9fafb', fontWeight: 'bold', color: '#0066cc' }}>{(row as any).as_req || ""}</td>
                                             <td style={{ border: '1px solid #eee', padding: '8px', textAlign: 'right', backgroundColor: '#f9fafb', fontWeight: 'bold' }}>{(row as any).as_used || ""}</td>
                                             <td style={{ border: '1px solid #eee', padding: '8px', textAlign: 'center', backgroundColor: '#f9fafb', fontWeight: 'bold', color: (row as any).as_ratio > 1 ? '#cc0000' : '#009900' }}>{(row as any).as_ratio || ""}</td>

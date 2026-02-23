@@ -10,6 +10,7 @@ export default function RCBeamAnalysisPage() {
         phi_f: 0.85,
         phi_v: 0.75
     });
+    const [designStandard, setDesignStandard] = useState("강도설계법(도로교 설계기준, 2010)");
 
     const [rows, setRows] = useState([
         {
@@ -184,7 +185,7 @@ export default function RCBeamAnalysisPage() {
             const response = await fetch('/api/analysis/beam', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ material, rows: validRows })
+                body: JSON.stringify({ design_standard: designStandard, material, rows: validRows })
             });
 
             if (response.ok) {
@@ -259,7 +260,7 @@ export default function RCBeamAnalysisPage() {
             const response = await fetch("/api/analysis/beam/export", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ material, rows: selectedRows })
+                body: JSON.stringify({ design_standard: designStandard, material, rows: selectedRows })
             });
 
             console.log("Fetch response status:", response.status);
@@ -358,6 +359,7 @@ export default function RCBeamAnalysisPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     mode: 'report',
+                    design_standard: designStandard,
                     material,
                     rows: [targetRow]
                 })
@@ -452,6 +454,30 @@ export default function RCBeamAnalysisPage() {
             {/* Main Content Area */}
             <div style={{ flex: 1, backgroundColor: '#fff', borderTop: '1px solid #ccc', padding: '20px', overflowY: 'auto' }}>
                 <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '30px' }}>
+
+                    {/* Design Standard Section */}
+                    <section>
+                        <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>Design Standard</h2>
+                        <div style={{ marginBottom: '10px' }}>
+                            <select
+                                value={designStandard}
+                                onChange={(e) => setDesignStandard(e.target.value)}
+                                style={{
+                                    padding: '8px 12px',
+                                    border: '1px solid #ccc',
+                                    borderRadius: '4px',
+                                    fontSize: '14px',
+                                    width: '400px',
+                                    backgroundColor: '#fff',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="강도설계법(도로교 설계기준, 2010)">강도설계법(도로교 설계기준, 2010)</option>
+                                <option value="강도설계법(콘크리트구조 설계기준, 2021)">강도설계법(콘크리트구조 설계기준, 2021)</option>
+                                <option value="한계상태설계법(도로교 설계기준, 2015)">한계상태설계법(도로교 설계기준, 2015)</option>
+                            </select>
+                        </div>
+                    </section>
 
                     {/* Material Section */}
                     <section>

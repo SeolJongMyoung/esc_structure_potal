@@ -129,7 +129,7 @@ class CalcReinfoeceConcrete:
         
         self.av_space_min = min(600, 0.5 * self.d_eff_v)
         self.V_s = self.av_use * self.f_y * self.d_eff_v / self.av_space if self.av_space > 0 else 0
-        self.V_s_max = (2/3) * math.sqrt(self.f_ck) * self.beam_b * self.d_eff_v
+        self.V_s_max = self.standard.get_vs_max(self.f_ck, self.beam_b, self.d_eff_v)
         self.pi_V_n = self.pi_v * (self.V_c + self.V_s)
 
     def calc_service(self):
@@ -168,12 +168,21 @@ class CalcReinfoeceConcrete:
         self.calc_shear()
         self.calc_service()
         
+        # Standard-specific Reinforcement Checks
+        calc_data = {
+            "f_ck": self.f_ck, "f_y": self.f_y, "b": self.beam_b, "h": self.beam_h,
+            "d": self.d_eff, "as_use": self.as_use, "as_req": self.as_req,
+            "phi_mn": self.M_r, "mu_nm": self.Mu_nm
+        }
+        self.min_rebar_res = self.standard.check_min_rebar(calc_data)
+        self.max_rebar_res = self.standard.check_max_rebar(calc_data)
+
         # Status and Rates
         self.Mr_rate = self.M_r / self.Mu_nm if self.Mu_nm > 0 else 9.99
         self.Vn_rate = self.pi_V_n / self.Vu_n if self.Vu_n > 0 else 9.99
         
-        # Shear reinforcement necessity: Vu > 0.5 * phi * Vc
-        self.v_reinf = "필요" if self.Vu_n > 0.5 * self.pi_V_c else "불필요"
+        # Shear reinforcement necessity: Vu > phi * Vc
+        self.v_reinf = "필요" if self.Vu_n > self.pi_V_c else "불필요"
         
         # Crack status: s_use <= s_min
         if self.as_use <= 0:
@@ -193,7 +202,9 @@ class CalcReinfoeceConcrete:
             "fs": round(self.f_s, 1),
             "crack_status": self.crack_status,
             "phi_f": round(self.pi_f_r, 3),
-            "phi_v": round(self.pi_v, 3)
+            "phi_v": round(self.pi_v, 3),
+            "min_rebar_ok": self.min_rebar_res['is_ok'],
+            "max_rebar_ok": self.max_rebar_res['is_ok']
         }
 
     def add_to_excel_workbook(self, wb, sheet_name):
@@ -273,34 +284,72 @@ class CalcReinfoeceConcrete:
 
         # Section 6: Reinforcement Check
         wsout['B31'].value = "6) 철근비 검토"
-        wsout['C32'].value = f"ρmin : 1.4 / fy          = {self.lo_min_1:.6f} "
-        wsout['C33'].value = f"       0.25 x √fck / fy  = {self.lo_min_2:.6f},  ρmin = {self.lo_min:.6f} 적용"
-        wsout['C34'].value = f"ρmax = 0.75 x ρb = 0.75 x (0.85 x β1 x fck / fy) x (6,000 / (6,000 + fy)) = {self.lo_bal:.6f}" 
-        wsout['C35'].value = f"ρuse = As / ( b x d ) = {self.lo_use:.6f} " 
-        if self.lo_use >= self.lo_min :
-            if self.lo_use < self.lo_max :
-                wsout['C36'].value = f"ρmax ≥ ρuse ≥ ρmin --> 최소철근비, 최대철근비 만족   ∴ O.K"
-            else:
-                wsout['C36'].value = f"ρmax < ρuse ≥ ρmin --> 최소철근비 만족, 최대 철근비 불만족   ∴ N.G"
-        else :
-            if self.lo_use < self.lo_max :
-                wsout['C36'].value = f"ρmax ≥ ρuse < ρmin --> 최소철근비 불만족,  최대 철근비 만족   ∴ N.G"
-                if self.lo_use >= self.lo_min_3 :
-                    wsout['C37'].value = f"ρuse ≥ 4 x ρreq / 3 = {self.lo_min_3:.6f} --> 최소철근비 만족   ∴ O.K"
-                else :
-                    wsout['C37'].value = f"ρuse < 4 x ρreq / 3 = {self.lo_min_3:.6f} --> 최소철근비 불만족   ∴ N.G"
-            else :    
-                wsout['C36'].value = f"ρmax < ρuse < ρmin --> 최소철근비, 최대 철근비 불만족   ∴ N.G"
+        
+        if ("콘크리트" in self.standard.name or "KCI" in self.standard.name) and 'mcr' in self.min_rebar_res:
+             # KCI specific formatting
+             mcr_knm = self.min_rebar_res['mcr'] / 1e6
+             limit_knm = self.min_rebar_res['limit'] / 1e6
+             ig = self.min_rebar_res['ig']
+             fr = self.min_rebar_res['fr']
+             phi_mn_knm = self.M_r / 1e6
+             
+             wsout['C32'].value = "* 최소 철근량 검토"
+             wsout['C33'].value = f"Ig = bh³ / 12 = {self.beam_b:.2f} x {self.beam_h:.2f}³ / 12 = {ig:,.0f} mm⁴"
+             wsout['C34'].value = f"fr = 0.63λ\u221a(fck) = 0.63 x 1.0 x \u221a({self.f_ck}) = {fr:.3f}"
+             wsout['C35'].value = f"Mcr = fr x Ig / yt = {fr:.3f} x {ig:,.0f} / ({self.beam_h:.2f} / 2) = {mcr_knm:,.3f} kN.m"
+             
+             compare_sign = "<" if 1.2 * mcr_knm < (4/3) * (self.Mu_nm/1e6) else "\u2265"
+             wsout['C36'].value = f"1.2Mcr = {1.2*mcr_knm:,.3f} kN.m {compare_sign} 4/3Mu = {(4/3)*(self.Mu_nm/1e6):,.3f} kN.m"
+             
+             status_min = "만족" if self.min_rebar_res['is_ok'] else "불만족"
+             ok_ng_min = "O.K" if self.min_rebar_res['is_ok'] else "N.G"
+             wsout['C37'].value = f"\u03a6Mn = {phi_mn_knm:,.3f} kN.m \u2265 {limit_knm:,.3f} kN.m  최소철근량 {status_min}, \u2234 {ok_ng_min}"
+             
+             wsout['C39'].value = "* 최대 철근비 검토"
+             rho_max = self.max_rebar_res['rho_max']
+             rho_use = self.max_rebar_res['rho_use']
+             status_max = "만족" if self.max_rebar_res['is_ok'] else "불만족"
+             ok_ng_max = "O.K" if self.max_rebar_res['is_ok'] else "N.G"
+             wsout['C40'].value = f"\u03c1max = {rho_max:.5f}"
+             wsout['C41'].value = f"\u03c1use = {rho_use:.5f} (As / bd)"
+             compare_sign_max = "<" if rho_use < rho_max else "\u2265"
+             wsout['C42'].value = f"\u03c1use {compare_sign_max} \u03c1max \u2192 철근비 {status_max}, \u2234 {ok_ng_max}"
+             
+             # Need to shift subsequent sections if needed, but let's see if we can fit. 
+             # Original Section 7 was at B39. KCI Section 6 ends at C42. 
+             # Let's shift Section 7+ by a few rows.
+             row_offset = 6
+        else:
+            wsout['C32'].value = f"ρmin : 1.4 / fy          = {self.lo_min_1:.6f} "
+            wsout['C33'].value = f"       0.25 x √fck / fy  = {self.lo_min_2:.6f},  ρmin = {self.lo_min:.6f} 적용"
+            wsout['C34'].value = f"ρmax = 0.75 x ρb = 0.75 x (0.85 x β1 x fck / fy) x (6,000 / (6,000 + fy)) = {self.lo_bal:.6f}" 
+            wsout['C35'].value = f"ρuse = As / ( b x d ) = {self.lo_use:.6f} " 
+            if self.lo_use >= self.lo_min :
+                if self.lo_use < self.lo_max :
+                    wsout['C36'].value = f"ρmax ≥ ρuse ≥ ρmin --> 최소철근비, 최대철근비 만족   ∴ O.K"
+                else:
+                    wsout['C36'].value = f"ρmax < ρuse ≥ ρmin --> 최소철근비 만족, 최대 철근비 불만족   ∴ N.G"
+            else :
+                if self.lo_use < self.lo_max :
+                    wsout['C36'].value = f"ρmax ≥ ρuse < ρmin --> 최소철근비 불만족,  최대 철근비 만족   ∴ N.G"
+                    if self.lo_use >= self.lo_min_3 :
+                        wsout['C37'].value = f"ρuse ≥ 4 x ρreq / 3 = {self.lo_min_3:.6f} --> 최소철근비 만족   ∴ O.K"
+                    else :
+                        wsout['C37'].value = f"ρuse < 4 x ρreq / 3 = {self.lo_min_3:.6f} --> 최소철근비 불만족   ∴ N.G"
+                else :    
+                    wsout['C36'].value = f"ρmax < ρuse < ρmin --> 최소철근비, 최대 철근비 불만족   ∴ N.G"
+            row_offset = 0
 
         # Section 7: Design Flexural Strength Calculation
-        wsout['B39'].value = "7) 설계 휨강도 산정"
-        wsout['C40'].value = f"a = As x fy / (0.85 x fck x b) = {self.a:.3f}mm"
-        wsout['C41'].value = f"Ø Mn = Øf x As x fy x (d - a / 2)"
-        wsout['C42'].value = f"     = {self.pi_f_r:.2f} x {self.as_use:.1f} x {self.f_y} x ({self.d_eff:.1f} - {self.a:.3f} / 2)"
+        base_s7 = 39 + row_offset
+        wsout[f'B{base_s7}'].value = "7) 설계 휨강도 산정"
+        wsout[f'C{base_s7+1}'].value = f"a = As x fy / (0.85 x fck x b) = {self.a:.3f}mm"
+        wsout[f'C{base_s7+2}'].value = f"Ø Mn = Øf x As x fy x (d - a / 2)"
+        wsout[f'C{base_s7+3}'].value = f"     = {self.pi_f_r:.2f} x {self.as_use:.1f} x {self.f_y} x ({self.d_eff:.1f} - {self.a:.3f} / 2)"
         if self.M_r > self.Mu_nm:
-            wsout['C43'].value = f"     = {self.M_r:.1f} N.mm ≥ Mu = {self.Mu_nm:.1f} N.mm  ∴ O.K  [S.F = {self.M_sf:.3f}]"
+            wsout[f'C{base_s7+4}'].value = f"     = {self.M_r:.1f} N.mm ≥ Mu = {self.Mu_nm:.1f} N.mm  ∴ O.K  [S.F = {self.M_sf:.3f}]"
         else:
-            wsout['C43'].value = f"     = {self.M_r:.1f} N.mm < Mu = {self.Mu_nm:.1f} N.mm  ∴ N.G  [S.F = {self.M_sf:.3f}]"
+            wsout[f'C{base_s7+4}'].value = f"     = {self.M_r:.1f} N.mm < Mu = {self.Mu_nm:.1f} N.mm  ∴ N.G  [S.F = {self.M_sf:.3f}]"
 
         # Section 10: Shear Check
         wsout['B45'].value ="10) 전단검토"
@@ -412,23 +461,52 @@ class CalcReinfoeceConcrete:
         # 6) 철근비 검토
         sec6 = []
         sec6.append("6) 철근비 검토")
-        sec6.append(f"   ρmin : 1.4 / fy          = {self.lo_min_1:.6f}")
-        sec6.append(f"          0.25 x √fck / fy  = {self.lo_min_2:.6f}, ρmin = {self.lo_min:.6f} 적용")
-        sec6.append(f"   ρmax = 0.75 x ρb = 0.75 x (0.85 x β1 x fck / fy) x (6000 / (6000 + fy)) = {self.lo_max:.6f}")
-        sec6.append(f"   ρuse = As / ( b x d ) = {self.lo_use:.6f}")
         
-        check_msg = ""
-        if self.lo_use >= self.lo_min:
-            if self.lo_use <= self.lo_max:
-                check_msg = "ρmax ≥ ρuse ≥ ρmin --> 최소철근비, 최대철근비 만족   ∴ O.K"
-            else:
-                check_msg = "ρmax < ρuse ≥ ρmin --> 최소철근비 만족, 최대철근비 불만족   ∴ N.G"
+        if ("콘크리트" in self.standard.name or "KCI" in self.standard.name) and 'mcr' in self.min_rebar_res:
+            # Special formatting for KCI based on image
+            mcr_knm = self.min_rebar_res.get('mcr', 0) / 1e6
+            limit_knm = self.min_rebar_res.get('limit', 0) / 1e6
+            ig = self.min_rebar_res.get('ig', 0)
+            fr = self.min_rebar_res.get('fr', 0)
+            phi_mn_knm = self.M_r / 1e6
+            
+            sec6.append("   * 최소 철근량 검토")
+            sec6.append(f"     Ig = bh³ / 12 = {self.beam_b:.2f} x {self.beam_h:.2f}³ / 12 = {ig:,.0f} mm⁴")
+            sec6.append(f"     fr = 0.63λ\u221a(fck) = 0.63 x 1.0 x \u221a({self.f_ck}) = {fr:.3f}")
+            sec6.append(f"     Mcr = fr x Ig / yt = {fr:.3f} x {ig:,.0f} / ({self.beam_h:.2f} / 2) = {mcr_knm:,.3f} kN.m")
+            compare_sign = "<" if 1.2 * mcr_knm < (4/3) * (self.Mu_nm/1e6) else "\u2265"
+            sec6.append(f"     1.2Mcr = {1.2*mcr_knm:,.3f} kN.m {compare_sign} 4/3Mu = {(4/3)*(self.Mu_nm/1e6):,.3f} kN.m")
+            status_min = "만족" if self.min_rebar_res['is_ok'] else "불만족"
+            ok_ng_min = "O.K" if self.min_rebar_res['is_ok'] else "N.G"
+            sec6.append(f"     \u03a6Mn = {phi_mn_knm:,.3f} kN.m \u2265 {limit_knm:,.3f} kN.m  최소철근량 {status_min}, \u2234 {ok_ng_min}")
+            sec6.append("")
+            sec6.append("   * 최대 철근비 검토")
+            rho_max = self.max_rebar_res['rho_max']
+            rho_use = self.max_rebar_res['rho_use']
+            status_max = "만족" if self.max_rebar_res['is_ok'] else "불만족"
+            ok_ng_max = "O.K" if self.max_rebar_res['is_ok'] else "N.G"
+            sec6.append(f"     \u03c1max = {rho_max:.5f}")
+            sec6.append(f"     \u03c1use = As / bd = {rho_use:.5f}")
+            compare_sign_max = "<" if rho_use < rho_max else "\u2265"
+            sec6.append(f"     \u03c1use {compare_sign_max} \u03c1max \u2192 철근비 {status_max}, \u2234 {ok_ng_max}")
         else:
-            if self.lo_use >= self.lo_min_3:
-                check_msg = f"ρuse < ρmin 이나, ρuse ≥ 4/3 x ρreq ({self.lo_min_3:.6f}) 만족   ∴ O.K"
+            sec6.append(f"   \u03c1min : 1.4 / fy          = {self.lo_min_1:.6f}")
+            sec6.append(f"          0.25 x \u221afck / fy  = {self.lo_min_2:.6f}, \u03c1min = {self.lo_min:.6f} 적용")
+            sec6.append(f"   \u03c1max = 0.75 x \u03c1b = 0.75 x (0.85 x \u03b21 x fck / fy) x (6000 / (6000 + fy)) = {self.lo_max:.6f}")
+            sec6.append(f"   \u03c1use = As / ( b x d ) = {self.lo_use:.6f}")
+            
+            check_msg = ""
+            if self.lo_use >= self.lo_min:
+                if self.lo_use <= self.lo_max:
+                    check_msg = "\u03c1max \u2265 \u03c1use \u2265 \u03c1min --> 최소철근비, 최대철근비 만족   \u2234 O.K"
+                else:
+                    check_msg = "\u03c1max < \u03c1use \u2265 \u03c1min --> 최소철근비 만족, 최대철근비 불만족   \u2234 N.G"
             else:
-                check_msg = f"ρuse < ρmin 이며, ρuse < 4/3 x ρreq ({self.lo_min_3:.6f}) 불만족   ∴ N.G"
-        sec6.append(f"   {check_msg}")
+                if self.lo_use >= self.lo_min_3:
+                    check_msg = f"\u03c1use < \u03c1min 이나, \u03c1use \u2265 4/3 x \u03c1req ({self.lo_min_3:.6f}) 만족   \u2234 O.K"
+                else:
+                    check_msg = f"\u03c1use < \u03c1min 이며, \u03c1use < 4/3 x \u03c1req ({self.lo_min_3:.6f}) 불만족   \u2234 N.G"
+            sec6.append(f"   {check_msg}")
 
         # 7) 설계 휨강도 산정
         sec7 = []
@@ -470,7 +548,11 @@ class CalcReinfoeceConcrete:
             shear.append(f"  사용간격 {self.av_space:.1f} mm > 최소간격 = min(60cm, 0.5D) = {self.av_space_min:.3f}  \u2234 {res_space}")
             shear.append("")
             shear.append(f"  Vs = {self.av_use:.3f} x {self.f_y:.1f} x {self.d_eff_v:.1f} / {self.av_space:.1f} = {self.V_s:.1f} N")
-            shear.append(f"  Vs_max = 2 x \u221a{self.f_ck:.1f} / 3 x {self.beam_b:.1f} x {self.d_eff_v:.1f}")
+            if "콘크리트" in self.standard.name or "KCI" in self.standard.name:
+                shear.append(f"  Vs_max = 0.2 x (1 - fck / 250) x fck x b x d")
+                shear.append(f"         = 0.2 x (1 - {self.f_ck:.1f}/250) x {self.f_ck:.1f} x {self.beam_b:.1f} x {self.d_eff_v:.1f}")
+            else:
+                shear.append(f"  Vs_max = 2 x \u221a{self.f_ck:.1f} / 3 x {self.beam_b:.1f} x {self.d_eff_v:.1f}")
             res_vmax = "O.K" if self.V_s <= self.V_s_max else "N.G"
             shear.append(f"         = {self.V_s_max:.1f} N \u2264 Vs = {self.V_s:.1f} N  \u2234 {res_vmax}")
             

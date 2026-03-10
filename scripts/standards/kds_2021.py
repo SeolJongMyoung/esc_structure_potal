@@ -1,6 +1,6 @@
-from .base_standard import BaseDesignStandard
+from .kci_2017 import KCI2017
 
-class KDS2021(BaseDesignStandard):
+class KDS2021(KCI2017):
     @property
     def name(self):
         return "강도설계법(콘크리트구조 설계기준, 2021)"

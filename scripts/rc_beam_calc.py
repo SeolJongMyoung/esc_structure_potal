@@ -26,32 +26,46 @@ class CalcReinfoeceConcrete:
         self.rebar_material = RebarMaterial(f_y=self.f_y)
         self.E_s = self.rebar_material.E_s
         self.E_c = self.con_material.E_c
-
         self.Mu = float(row.get("Mu", 0))
         self.Vu = float(row.get("Vu", 0))
         self.Nu = float(row.get("Nu", 0))
         self.Ms = float(row.get("Ms", 0))
         self.beam_h = float(row.get("H", 0))
         self.beam_b = float(row.get("B", 0))
-        self.dc_1 = float(row.get("Dc", 0))
+        
+        # Layer 1
+        self.dc_1 = float(row.get("dc1", row.get("Dc", 0)))
+        self.as_dia1 = int(row.get("dia1", row.get("as_dia", 25)))
+        self.as_num1 = float(row.get("num1", row.get("as_num", 0)))
+        self.as_use1 = self.rebar.get_area(self.as_dia1) * self.as_num1
+        
+        # Layer 2
+        self.dc_2 = float(row.get("dc2", 0))
+        self.as_dia2 = int(row.get("dia2", 13))
+        self.as_num2 = float(row.get("num2", 0))
+        self.as_use2 = self.rebar.get_area(self.as_dia2) * self.as_num2
+        
+        # Layer 3
+        self.dc_3 = float(row.get("dc3", 0))
+        self.as_dia3 = int(row.get("dia3", 13))
+        self.as_num3 = float(row.get("num3", 0))
+        self.as_use3 = self.rebar.get_area(self.as_dia3) * self.as_num3
+        
+        # Total Area and Centroid Calculation
+        self.as_use = self.as_use1 + self.as_use2 + self.as_use3
+        if self.as_use > 0:
+            self.d_c = (self.as_use1 * self.dc_1 + self.as_use2 * self.dc_2 + self.as_use3 * self.dc_3) / self.as_use
+        else:
+            self.d_c = self.dc_1 if self.dc_1 > 0 else 0
+            
+        self.d_eff = self.beam_h - self.d_c
+        self.dt = self.beam_h - self.dc_1 # dt is for the layer closest to the extreme tension fiber
         
         self.Mu_nm = self.Mu * 1e6
         self.Vu_n = self.Vu * 1e3
         self.Ms_nm = self.Ms * 1e6
-        
-        self.as_dia1 = int(row.get("as_dia", 25))
-        self.as_num1 = float(row.get("as_num", 0))
         self.rebar_id = 'D'
-        self.as_use1 = self.rebar.get_area(self.as_dia1)
-        self.as_use = self.as_use1 * self.as_num1
-        self.d_c = self.dc_1 # Used in report
-        self.d_eff = self.beam_h - self.dc_1
-        self.dt = self.d_eff # dt is usually for bottom rebar
 
-        # Multi-layer placeholders as per snippet
-        self.as_dia2 = 0; self.as_num2 = 0; self.as_use2 = 0; self.dc_2 = 0
-        self.as_dia3 = 0; self.as_num3 = 0; self.as_use3 = 0; self.dc_3 = 0
-        
         # Stirrup
         self.av_dia = int(row.get("av_dia", 16))
         self.av_leg = float(row.get("av_leg", 0))
@@ -139,20 +153,45 @@ class CalcReinfoeceConcrete:
         self.s_min_1 = 375 * (self.k_cr / self.f_s) - 2.5 * self.c_c if self.f_s > 0 else 999
         self.s_min_2 = 300 * (self.k_cr / self.f_s) if self.f_s > 0 else 999
         self.s_min = min(self.s_min_1, self.s_min_2)
-        self.s_use = (self.beam_b - 2 * 40 - self.as_dia1) / (self.as_num1 - 1) if self.as_num1 > 1 else 0
+        
+        # Calculate effective number of bars (sum only if cover is the same as dc1)
+        eff_num = self.as_num1
+        if self.as_num2 > 0 and abs(self.dc_1 - self.dc_2) < 0.1:
+            eff_num += self.as_num2
+        if self.as_num3 > 0 and abs(self.dc_1 - self.dc_3) < 0.1:
+            eff_num += self.as_num3
+            
+        self.s_use = (self.beam_b) / (eff_num) if eff_num > 1 else 0
 
     def calculate(self):
         self.calc_moment()
         self.calc_shear()
         self.calc_service()
         
+        # Status and Rates
+        self.Mr_rate = self.M_r / self.Mu_nm if self.Mu_nm > 0 else 9.99
+        self.Vn_rate = self.pi_V_n / self.Vu_n if self.Vu_n > 0 else 9.99
+        
+        # Shear reinforcement necessity: Vu > 0.5 * phi * Vc
+        self.v_reinf = "필요" if self.Vu_n > 0.5 * self.pi_V_c else "불필요"
+        
+        # Crack status: s_use <= s_min
+        if self.as_use <= 0:
+            self.crack_status = "-"
+        else:
+            self.crack_status = "OK" if self.s_use <= self.s_min else "NG"
+
         return {
             "as_req": round(self.as_req, 1),
             "as_used": round(self.as_use, 1),
-            "as_ratio": round(self.as_use / self.as_req, 3) if self.as_req > 0 else 0,
+            "as_ratio": round(self.as_req / self.as_use, 3) if self.as_use > 0 else 0,
             "Mr": round(self.M_r / 1e6, 1),
+            "Mr_rate": round(self.Mr_rate, 3),
             "Vn": round(self.pi_V_n / 1e3, 1),
+            "Vn_rate": round(self.Vn_rate, 3),
+            "V_reinf": self.v_reinf,
             "fs": round(self.f_s, 1),
+            "crack_status": self.crack_status,
             "phi_f": round(self.pi_f_r, 3),
             "phi_v": round(self.pi_v, 3)
         }
@@ -227,10 +266,10 @@ class CalcReinfoeceConcrete:
         wsout['C24'].value = ' 2 x 0.85 x fck x b                         Øf '
         
         # Section 5: Used Reinforcement
-        wsout['B26'].value = f"5) 사용철근량 : Asuse = {self.as_use:.1f} mm², 철근도심 : dc = {self.d_eff:.1f}mm,  [ 사용율 = {self.as_use/self.as_req if self.as_req > 0 else 0:.3f} ]"
-        wsout['F27'].value = f"1단 : {self.rebar_id} {self.as_dia1} - {self.as_num1} EA (= {self.as_use1*self.as_num1:.1f} mm², dc1 = {self.dc_1:.1f} mm)"
-        wsout['F28'].value = f"2단 : {self.rebar_id} {self.as_dia2} - {self.as_num2} EA (= {self.as_use2*self.as_num2:.1f} mm², dc2 = {self.dc_2:.1f} mm)"
-        wsout['F29'].value = f"3단 : {self.rebar_id} {self.as_dia3} - {self.as_num3} EA (= {self.as_use3*self.as_num3:.1f} mm², dc3 = {self.dc_3:.1f} mm)"
+        wsout['B26'].value = f"5) 사용철근량 : Asuse = {self.as_use:.1f} mm², 철근도심 : dc_avg = {self.d_c:.1f}mm,  [ 사용율 = {self.as_use/self.as_req if self.as_req > 0 else 0:.3f} ]"
+        wsout['F27'].value = f"1단 : {self.rebar_id} {self.as_dia1} - {self.as_num1} EA (= {self.as_use1:.1f} mm², dc1 = {self.dc_1:.1f} mm)"
+        wsout['F28'].value = f"2단 : {self.rebar_id} {self.as_dia2} - {self.as_num2} EA (= {self.as_use2:.1f} mm², dc2 = {self.dc_2:.1f} mm)"
+        wsout['F29'].value = f"3단 : {self.rebar_id} {self.as_dia3} - {self.as_num3} EA (= {self.as_use3:.1f} mm², dc3 = {self.dc_3:.1f} mm)"
 
         # Section 6: Reinforcement Check
         wsout['B31'].value = "6) 철근비 검토"
@@ -298,8 +337,8 @@ class CalcReinfoeceConcrete:
         wsout['D63'].value =f"χ = -n x As / b + n x As / b x √ [ 1 + 2 x b x d / ( n x As ) ]"
         wsout['D64'].value =f"  = -{self.nr:.1f} x {self.as_use:.1f} / {self.beam_b} + {self.nr:.1f} x {self.as_use:.1f} / {self.beam_b} x √ [1 + 2 x {self.beam_b} x {self.d_eff:.3f} / ({self.nr:.1f} x {self.as_use:.1f})]"
         wsout['D65'].value =f"  = {self.chi_o:.3f} mm"
-        wsout['D66'].value =f"사용철근량 = {self.as_use:.3f} mm²  (최외단 철근도심 : {self.dc_1:.1f} mm)"
-        wsout['D67'].value =f"      1단 : {self.rebar_id}{self.as_dia1} - {self.as_num1:.1f} EA, 2단 : {self.rebar_id}{self.as_dia2} - {self.as_num2:.1f} EA, 3단 : {self.rebar_id}{self.as_dia3} - {self.as_num3:.1f} EA )"
+        wsout['D66'].value = f"사용철근량 = {self.as_use:.3f} mm²  (철근군 평균도심 : {self.d_c:.1f} mm)"
+        wsout['D67'].value = f"      1단 : {self.rebar_id}{self.as_dia1}-{self.as_num1:.1f}EA, 2단 : {self.rebar_id}{self.as_dia2}-{self.as_num2:.1f}EA, 3단 : {self.rebar_id}{self.as_dia3}-{self.as_num3:.1f}EA"
         
         wsout['C69'].value =f"② 철근의 최대 중심간격"
         wsout['D70'].value =f"강재의 부식에 대한 환경조건은 『 {self.crack_case} 』 적용"
@@ -365,10 +404,10 @@ class CalcReinfoeceConcrete:
         # 5) 사용철근량
         sec5 = []
         usage_ratio = self.as_use / self.as_req if self.as_req > 0 else 0
-        sec5.append(f"5) 사용철근량 : Asuse = {self.as_use:.1f} mm², 철근도심 : do = {self.d_eff:.1f}mm, [ 사용율 = {usage_ratio:.3f} ]")
-        sec5.append(f"   1단 : D {self.as_dia1} - {self.as_num1} EA (= {self.as_use1*self.as_num1:.1f} mm², do1 = {self.dc_1:.1f} mm)")
-        sec5.append(f"   2단 : D {self.as_dia2} - {self.as_num2} EA (= {self.as_use2*self.as_num2:.1f} mm², do2 = {self.dc_2:.1f} mm)")
-        sec5.append(f"   3단 : D {self.as_dia3} - {self.as_num3} EA (= {self.as_use3*self.as_num3:.1f} mm², do3 = {self.dc_3:.1f} mm)")
+        sec5.append(f"5) 사용철근량 : Asuse = {self.as_use:.1f} mm², 철근도심 : dc_avg = {self.d_c:.1f}mm, [ 사용율 = {usage_ratio:.3f} ]")
+        sec5.append(f"   1단 : D {self.as_dia1} - {self.as_num1} EA (= {self.as_use1:.1f} mm², dc1 = {self.dc_1:.1f} mm)")
+        sec5.append(f"   2단 : D {self.as_dia2} - {self.as_num2} EA (= {self.as_use2:.1f} mm², dc2 = {self.dc_2:.1f} mm)")
+        sec5.append(f"   3단 : D {self.as_dia3} - {self.as_num3} EA (= {self.as_use3:.1f} mm², dc3 = {self.dc_3:.1f} mm)")
 
         # 6) 철근비 검토
         sec6 = []
@@ -453,7 +492,7 @@ class CalcReinfoeceConcrete:
         service.append(f"    \u03c7 = -n x As / b + n x As / b x \u221a [ 1 + 2 x b x d / ( n x As ) ]")
         service.append(f"      = -{self.nr:.1f} x {self.as_use:.1f} / {self.beam_b} + {self.nr:.1f} x {self.as_use:.1f} / {self.beam_b} x \u221a [1 + 2 x {self.beam_b} x {self.d_eff:.3f} / ({self.nr:.1f} x {self.as_use:.1f})]")
         service.append(f"      = {self.chi_o:.3f} mm")
-        service.append(f"    사용철근량 = {self.as_use:.3f} mm\u00b2  (최외단 철근도심 : {self.dc_1:.1f} mm)")
+        service.append(f"    사용철근량 = {self.as_use:.3f} mm\u00b2  (철근군 평균도심 : {self.d_c:.1f} mm)")
         service.append(f"      1단 : D {self.as_dia1} - {self.as_num1} EA, 2단 : D {self.as_dia2} - {self.as_num2} EA, 3단 : D {self.as_dia3} - {self.as_num3} EA )")
         service.append("")
         service.append("  ② 철근의 최대 중심간격")

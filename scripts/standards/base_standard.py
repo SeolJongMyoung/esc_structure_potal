@@ -17,6 +17,28 @@ class BaseDesignStandard(ABC):
         """전단 강도감소계수 산정"""
         pass
 
+    def get_concrete_method(self):
+        """재료 모델링 방식: 'USD' (전통적 방식) 또는 'LSD' (한계상태설계법 방식)"""
+        return "USD"
+
+    def get_material_factors(self):
+        """재료저항계수 (phi_c, phi_s). USD는 보통 1.0."""
+        return 1.0, 1.0
+
+    def get_flexure_factors(self, f_ck):
+        """휨 해석용 계수 (alpha, beta).
+        alpha: 압축합력 계수 (Force = alpha * fcd * b * c)
+        beta: 압축합력 작용점 계수 (Centroid = beta * c)
+        """
+        beta_1 = self.get_beta_1(f_ck)
+        return 0.85 * beta_1, beta_1 / 2
+
+    def calc_shear_capacity(self, analyzer):
+        """전단 강도 계산 logic. 기본은 USD/현행 기준 방식."""
+        # This will be called by analyzer.calc_shear()
+        # Default implementation remains in the analyzer or provided here
+        return None 
+
     def get_beta_1(self, f_ck):
         """등가 사각형 응력 블록 깊이 계수 산정"""
         if f_ck <= 28:

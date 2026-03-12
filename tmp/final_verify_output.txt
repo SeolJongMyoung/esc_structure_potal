@@ -1,0 +1,11 @@
+﻿Testing LSD 2015 with Refined Detailing Report...
+
+[RCSectionAnalyzer Check]
+  s_use: 125.0 mm
+  s_detailing_max: 250.0 mm
+  s_detailing_ok: O.K
+  => s_detailing_max calculation: OK
+
+[TextReportBuilder Check]
+  => As_max/As_min check in report: OK
+  => Spacing check in report: OK

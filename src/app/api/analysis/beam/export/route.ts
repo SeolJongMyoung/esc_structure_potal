@@ -6,7 +6,7 @@ import fs from "fs";
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { material, rows } = body;
+        const { design_standard, material, rows } = body;
 
         // Start Python process
         const scriptPath = path.join(process.cwd(), "scripts", "rc_beam_calc.py");
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
         let errorData = "";
 
         // Send input to Python
-        const inputStr = JSON.stringify({ mode: "export", material, rows });
+        const inputStr = JSON.stringify({ mode: "export", design_standard, material, rows });
         pythonProcess.stdin.write(inputStr);
         pythonProcess.stdin.end();
 

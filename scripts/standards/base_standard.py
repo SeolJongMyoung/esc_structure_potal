@@ -25,6 +25,10 @@ class BaseDesignStandard(ABC):
         """재료저항계수 (phi_c, phi_s). USD는 보통 1.0."""
         return 1.0, 1.0
 
+    def get_alpha_cc(self):
+        """콘크리트 압축강도 유효계수 (alpha_cc). LSD에서 주로 0.85 사용."""
+        return 1.0
+
     def get_flexure_factors(self, f_ck):
         """휨 해석용 계수 (alpha, beta).
         alpha: 압축합력 계수 (Force = alpha * fcd * b * c)

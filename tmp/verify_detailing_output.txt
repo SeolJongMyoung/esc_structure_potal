@@ -1,0 +1,25 @@
+﻿Testing LSD 2015 with Refined Detailing Report...
+
+[RCSectionAnalyzer Check]
+  s_use: 125.0 mm
+  s_detailing_max: 250.0 mm
+  s_detailing_ok: O.K
+  => s_detailing_max calculation: OK
+
+[TextReportBuilder Check]
+  => As_max/As_min check in report: OK
+  => Spacing check in report: NOT FOUND
+Debug: Report snippet around Spacing check:
+Reinforcement Check
+  As_max (20000.0) ≥ As_use (4053.6) ≥ As_min (1400.0)
+  Max Reinforcement ratio - O.K , Min Reinforcement ratio - O.K
+  철극 간격검토: s_max = min( 2h, 250 ) = 250 ≥ s = 125 mm  O.K ( 도.설.기 5.12.3.1 )
+
+* Moment check
+  T = As × fyd =   4053.6 ×    360.0 =    1459296 N
+  C = n × fcd × a × b = 0.94 × 16.575 × a × 1000.0 =    15600.0 × a
+  a = As × fyd / ( 0.94 × fcd × b ) =   88.042 mm
+  c = a / 0.800 =  110.052 mm
+  Mr =  519.479 kN.m (Mu =  500.000 kN.m)  --> O.K
+
+* Shear force ch

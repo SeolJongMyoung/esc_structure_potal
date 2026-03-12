@@ -1,607 +1,13 @@
 import sys
 import json
-import math
-from civil_usd_materials import ConcMaterial, RebarMaterial
-from rebar_area_ks import KoreanRebar
-from standards import get_standard
+import os
 
-class CalcReinfoeceConcrete:
-    def __init__(self, data):
-        self.rebar = KoreanRebar()
-        
-        mat = data.get("material", {})
-        row = data.get("row", {})
+# Ensure the scripts directory is in the python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-        self.f_ck = float(mat.get("fck", 35))
-        self.f_y = float(mat.get("fy", 400))
-        
-        # Design Standard Selection
-        self.standard_name = data.get("design_standard", "강도설계법(도로교 설계기준, 2010)")
-        self.standard = get_standard(self.standard_name)
-        
-        self.pi_f = float(mat.get("phi_s", 0.85)) # Base Øf (will be overridden by standard)
-        self.pi_v = self.standard.get_phi_v()
-        
-        self.con_material = ConcMaterial(f_ck=self.f_ck)
-        self.rebar_material = RebarMaterial(f_y=self.f_y)
-        self.E_s = self.rebar_material.E_s
-        self.E_c = self.con_material.E_c
-        self.Mu = float(row.get("Mu", 0))
-        self.Vu = float(row.get("Vu", 0))
-        self.Nu = float(row.get("Nu", 0))
-        self.Ms = float(row.get("Ms", 0))
-        self.beam_h = float(row.get("H", 0))
-        self.beam_b = float(row.get("B", 0))
-        
-        # Layer 1
-        self.dc_1 = float(row.get("dc1", row.get("Dc", 0)))
-        self.as_dia1 = int(row.get("dia1", row.get("as_dia", 25)))
-        self.as_num1 = float(row.get("num1", row.get("as_num", 0)))
-        self.as_use1 = self.rebar.get_area(self.as_dia1) * self.as_num1
-        
-        # Layer 2
-        self.dc_2 = float(row.get("dc2", 0))
-        self.as_dia2 = int(row.get("dia2", 13))
-        self.as_num2 = float(row.get("num2", 0))
-        self.as_use2 = self.rebar.get_area(self.as_dia2) * self.as_num2
-        
-        # Layer 3
-        self.dc_3 = float(row.get("dc3", 0))
-        self.as_dia3 = int(row.get("dia3", 13))
-        self.as_num3 = float(row.get("num3", 0))
-        self.as_use3 = self.rebar.get_area(self.as_dia3) * self.as_num3
-        
-        # Total Area and Centroid Calculation
-        self.as_use = self.as_use1 + self.as_use2 + self.as_use3
-        if self.as_use > 0:
-            self.d_c = (self.as_use1 * self.dc_1 + self.as_use2 * self.dc_2 + self.as_use3 * self.dc_3) / self.as_use
-        else:
-            self.d_c = self.dc_1 if self.dc_1 > 0 else 0
-            
-        self.d_eff = self.beam_h - self.d_c
-        self.dt = self.beam_h - self.dc_1 # dt is for the layer closest to the extreme tension fiber
-        
-        self.Mu_nm = self.Mu * 1e6
-        self.Vu_n = self.Vu * 1e3
-        self.Ms_nm = self.Ms * 1e6
-        self.rebar_id = 'D'
-
-        # Stirrup
-        self.av_dia = int(row.get("av_dia", 16))
-        self.av_leg = float(row.get("av_leg", 0))
-        self.av_space = float(row.get("av_space", 200))
-
-        # Crack control environment
-        self.crack_case = row.get("crack_case", "일반환경").strip()
-
-    def calc_moment(self):
-        if self.beam_h <= 0 or self.beam_b <= 0 or self.d_eff <= 0:
-            self.as_req = 0; self.M_r = 0; self.M_sf = 0; return
-
-        self.beta_1 = self.standard.get_beta_1(self.f_ck)
-
-        # Tension behavior
-        self.tension_force = self.as_use * self.f_y
-        self.a = self.tension_force / (0.85 * self.f_ck * self.beam_b) if self.f_ck * self.beam_b > 0 else 0
-        self.c = self.a / self.beta_1 if self.beta_1 > 0 else 0
-        self.compression_force = 0.85 * self.f_ck * self.beam_b # This is Force per mm (0.85*fck*b) as per user snippet logic C = ... * a
-        
-        self.epsilon_y = self.f_y / self.E_s
-        self.epsilon_t = 0.003 * (self.dt - self.c) / self.c if self.c > 0 else 0
-
-        self.pi_f_r, self.epsilon_t_result = self.standard.get_phi_f(self.epsilon_t, self.epsilon_y)
-
-        # Required Rebar (Quadratic solver)
-        K_fy = self.f_y / (2 * 0.85 * self.f_ck * self.beam_b) if self.f_ck * self.beam_b > 0 else 0
-        if K_fy > 0:
-            A = K_fy
-            B = -self.d_eff
-            C = self.Mu_nm / (self.pi_f_r * self.f_y) if self.pi_f_r * self.f_y > 0 else 0
-            det = B**2 - 4 * A * C
-            self.as_req = (-B - math.sqrt(det)) / (2 * A) if det >= 0 else 9999
-        else:
-            self.as_req = 0
-
-        # Reinforcement ratio check
-        self.lo_min_1 = 1.4 / self.f_y
-        self.lo_min_2 = 0.25 * math.sqrt(self.f_ck) / self.f_y
-        self.lo_min = max(self.lo_min_1, self.lo_min_2)
-        self.lo_bal = (0.85 * self.beta_1 * self.f_ck / self.f_y) * (6000 / (6000 + self.f_y))
-        self.lo_max = 0.75 * self.lo_bal
-        self.lo_use = self.as_use / (self.beam_b * self.d_eff) if self.beam_b * self.d_eff > 0 else 0
-        self.lo_min_3 = (4/3) * (self.as_req / (self.beam_b * self.d_eff)) if self.beam_b * self.d_eff > 0 else 0
-
-        # Resistant Moment
-        self.M_r = self.pi_f_r * self.as_use * self.f_y * (self.d_eff - self.a / 2) # N.mm
-        self.M_sf = self.M_r / self.Mu_nm if self.Mu_nm > 0 else 0
-
-    def calc_shear(self):
-        if self.beam_b <= 0 or self.d_eff <= 0:
-            self.V_c = 0; self.pi_V_c = 0; self.V_s = 0; self.pi_V_n = 0; return
-        
-        self.d_eff_v = self.d_eff # Snippet uses d_eff_v
-        self.V_c = (math.sqrt(self.f_ck) / 6) * self.beam_b * self.d_eff_v # N
-        self.pi_V_c = self.pi_v * self.V_c
-        
-        self.av_use = self.rebar.get_area(self.av_dia) * self.av_leg
-        self.av_req = (self.Vu_n - self.pi_V_c) * self.av_space / (self.f_y * self.d_eff_v * self.pi_v) if self.f_y * self.d_eff_v * self.pi_v > 0 else 0
-        self.av_req = max(0, self.av_req)
-        
-        self.av_space_min = min(600, 0.5 * self.d_eff_v)
-        self.V_s = self.av_use * self.f_y * self.d_eff_v / self.av_space if self.av_space > 0 else 0
-        self.V_s_max = self.standard.get_vs_max(self.f_ck, self.beam_b, self.d_eff_v)
-        self.pi_V_n = self.pi_v * (self.V_c + self.V_s)
-
-    def calc_service(self):
-        if self.as_use <= 0 or self.E_c <= 0:
-            self.f_s = 0; self.chi_o = 0; self.s_use = 0; self.s_min = 0; return
-        
-        self.nr = self.E_s / self.E_c
-        n = self.nr
-        # chi_o = -n*As/b + n*As/b * sqrt(1 + 2*b*d/(n*As))
-        term = (n * self.as_use / self.beam_b)
-        self.chi_o = -term + term * math.sqrt(1 + 2 * self.beam_b * self.d_eff / (n * self.as_use))
-        self.f_s = self.Ms_nm / (self.as_use * (self.d_eff - self.chi_o / 3)) if self.as_use > 0 else 0
-        
-        # Crack control Sa
-        self.cr_index = self.crack_case
-        self.c_c = self.dc_1 - self.as_dia1 / 2
-        
-        # k_cr based on standard and environment
-        self.k_cr = self.standard.get_k_cr(self.crack_case)
-            
-        self.s_min_1 = 375 * (self.k_cr / self.f_s) - 2.5 * self.c_c if self.f_s > 0 else 999
-        self.s_min_2 = 300 * (self.k_cr / self.f_s) if self.f_s > 0 else 999
-        self.s_min = min(self.s_min_1, self.s_min_2)
-        
-        # Calculate effective number of bars (sum only if cover is the same as dc1)
-        eff_num = self.as_num1
-        if self.as_num2 > 0 and abs(self.dc_1 - self.dc_2) < 0.1:
-            eff_num += self.as_num2
-        if self.as_num3 > 0 and abs(self.dc_1 - self.dc_3) < 0.1:
-            eff_num += self.as_num3
-            
-        self.s_use = (self.beam_b) / (eff_num) if eff_num > 1 else 0
-
-    def calculate(self):
-        self.calc_moment()
-        self.calc_shear()
-        self.calc_service()
-        
-        # Standard-specific Reinforcement Checks
-        calc_data = {
-            "f_ck": self.f_ck, "f_y": self.f_y, "b": self.beam_b, "h": self.beam_h,
-            "d": self.d_eff, "as_use": self.as_use, "as_req": self.as_req,
-            "phi_mn": self.M_r, "mu_nm": self.Mu_nm
-        }
-        self.min_rebar_res = self.standard.check_min_rebar(calc_data)
-        self.max_rebar_res = self.standard.check_max_rebar(calc_data)
-
-        # Status and Rates
-        self.Mr_rate = self.M_r / self.Mu_nm if self.Mu_nm > 0 else 9.99
-        self.Vn_rate = self.pi_V_n / self.Vu_n if self.Vu_n > 0 else 9.99
-        
-        # Shear reinforcement necessity: Vu > phi * Vc
-        self.v_reinf = "필요" if self.Vu_n > self.pi_V_c else "불필요"
-        
-        # Crack status: s_use <= s_min
-        if self.as_use <= 0:
-            self.crack_status = "-"
-        else:
-            self.crack_status = "OK" if self.s_use <= self.s_min else "NG"
-
-        return {
-            "as_req": round(self.as_req, 1),
-            "as_used": round(self.as_use, 1),
-            "as_ratio": round(self.as_req / self.as_use, 3) if self.as_use > 0 else 0,
-            "Mr": round(self.M_r / 1e6, 1),
-            "Mr_rate": round(self.Mr_rate, 3),
-            "Vn": round(self.pi_V_n / 1e3, 1),
-            "Vn_rate": round(self.Vn_rate, 3),
-            "V_reinf": self.v_reinf,
-            "fs": round(self.f_s, 1),
-            "crack_status": self.crack_status,
-            "phi_f": round(self.pi_f_r, 3),
-            "phi_v": round(self.pi_v, 3),
-            "min_rebar_ok": self.min_rebar_res['is_ok'],
-            "max_rebar_ok": self.max_rebar_res['is_ok']
-        }
-
-    def add_to_excel_workbook(self, wb, sheet_name):
-        from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
-        from string import ascii_uppercase
-        
-        self.calculate()
-        wsout = wb.create_sheet(title=sheet_name)
-        
-        # Set up basic formatting
-        alpalist = list(ascii_uppercase)
-        for i in range(1, 100):
-            wsout.row_dimensions[i].height = 15
-        for i in alpalist:
-            wsout.column_dimensions[i].width = 3.0
-        font_format = Font(size=9, name='굴림체')
-        for rows in wsout["A1":"Z100"]:
-            for cell in rows:
-                cell.font = font_format
-
-        # Section 1: Basic Information
-        wsout['B2'].value = '1) 단면제원 및 설계가정'
-        wsout['C3'].value = f"fck = {self.f_ck} MPa, fy = {self.f_y} MPa, Øf = {self.pi_f_r:.2f}, Øv = {self.pi_v:.2f}, Es = {self.E_s} MPa"
-
-        # Formatting for table headers
-        for r in range(4,6) :                        # 4~5행 글짜 위치 중앙으로 정렬
-            for c in range(3,24) :                      
-                wsout.cell(r,c).alignment = Alignment(horizontal='center', vertical='center')  
-        for r in range(4,6) :                        # 4~5행 테두리 그리기
-            for c in range(3,24) :                      
-                wsout.cell(r,c).border = Border(left=Side(border_style='thin'),right=Side(border_style='thin'),top=Side(border_style='thin'),bottom=Side(border_style='thin'))
-        for r in range(4,6) :                        # 셀 병합 C4~L4, C5~L5
-            for c in [3,6,9,12] :                       
-                c1 = c + 2
-                wsout.merge_cells(start_row=r, start_column=c, end_row=r, end_column=c1)
-        for r in range(4,6) :                         # 셀 병합 O4~W4, O5~W5  
-            for c in [15,19,23] :                          
-                c1 = c + 3
-                wsout.merge_cells(start_row=r, start_column=c, end_row=r, end_column=c1)    
-        for c in range(3,24) :                         # 셀 채우기 C4~T5
-            wsout.cell(4,c).fill = PatternFill(fill_type='solid', fgColor='0FFFF0')
-        
-        wsout['C4'].value = 'B(mm)'; wsout['F4'].value = 'H(mm)'; wsout['I4'].value = 'd(mm)'; wsout['L4'].value = '피복(mm)'
-        wsout['O4'].value = 'Mu(N.mm)'; wsout['S4'].value = 'Vu(N)'; wsout['W4'].value = 'Ms(N.mm)'
-        wsout['C5'].value = self.beam_b; wsout['F5'].value = self.beam_h; wsout['I5'].value = f"{self.d_eff:.1f}"; wsout['L5'].value = f"{self.d_c:.1f}"
-        wsout['O5'].value = self.Mu_nm; wsout['S5'].value = self.Vu_n; wsout['W5'].value = self.Ms_nm
-
-        wsout['B7'].value = '2) 콘크리트 재료상수'
-        wsout['C8'].value = 'β1    : 등가 사각형 응력 블록의 깊이계수'; wsout['P8'].value = '='; wsout['Q8'].value = self.beta_1
-
-        # Section 3: Strength reduction factor
-        wsout['B10'].value = '3) 강도감소계수(Ø) 산정'
-        wsout['C11'].value = f"T = As x fy = {self.as_use:.3f} x {self.f_y:.3f} = {self.tension_force:.1f} N"
-        wsout['C12'].value = f"C = 0.85 x fck x a x b = 0.85 x {self.f_ck:.3f} x a x {self.beam_b:.3f} = {self.compression_force:.1f} x a"
-        wsout['C13'].value = f"T = C 이므로, a = {self.a:.3f} mm, c = {self.a:.3f} / β1 = {self.a:.3f} / {self.beta_1:.3f} = {self.c:.3f} mm"
-        wsout['C14'].value = f"εy = fy / Es = {self.f_y} / {self.E_s} = {self.epsilon_y:.5f}"
-        wsout['C15'].value = f"εt = 0.00300 x (dt - c) / c = 0.00300 x ({self.d_eff:.3f} - {self.c:.2f}) / {self.c:.2f} = {self.epsilon_t:.5f}"
-        if self.epsilon_t >= 0.005:
-            wsout['C16'].value = f"εt ≥ 0.0050 이므로 {self.epsilon_t_result}이며, Ø = {self.pi_f_r:.2f} 를 적용한다"
-        else:
-            wsout['C16'].value = f"εt < 0.0050 이므로 {self.epsilon_t_result}이며, Ø = {self.pi_f_r:.2f} 를 적용한다"
-
-        # Section 4: Required Reinforcement Calculation
-        wsout['B18'].value = '4) 필요철근량 산정'
-        wsout['C19'].value = 'Mu / Øf = As x fy  x (d - a / 2)              ----------------   ①'
-        wsout['C20'].value = ' a = As x fy  / ( 0.85 x fck x b)             ----------------   ②'
-        wsout['C21'].value = ' 식②를 식①에 대입하여 이차방정식으로 As를 구한다'
-        wsout['E22'].value = ' fy²                                Mu'
-        wsout['C23'].value = f" ────────── As² - fy x d x As + ───  = 0 ,   Asreq = {self.as_req:.3f} mm²"
-        wsout['C24'].value = ' 2 x 0.85 x fck x b                         Øf '
-        
-        # Section 5: Used Reinforcement
-        wsout['B26'].value = f"5) 사용철근량 : Asuse = {self.as_use:.1f} mm², 철근도심 : dc_avg = {self.d_c:.1f}mm,  [ 사용율 = {self.as_use/self.as_req if self.as_req > 0 else 0:.3f} ]"
-        wsout['F27'].value = f"1단 : {self.rebar_id} {self.as_dia1} - {self.as_num1} EA (= {self.as_use1:.1f} mm², dc1 = {self.dc_1:.1f} mm)"
-        wsout['F28'].value = f"2단 : {self.rebar_id} {self.as_dia2} - {self.as_num2} EA (= {self.as_use2:.1f} mm², dc2 = {self.dc_2:.1f} mm)"
-        wsout['F29'].value = f"3단 : {self.rebar_id} {self.as_dia3} - {self.as_num3} EA (= {self.as_use3:.1f} mm², dc3 = {self.dc_3:.1f} mm)"
-
-        # Section 6: Reinforcement Check
-        wsout['B31'].value = "6) 철근비 검토"
-        
-        if ("콘크리트" in self.standard.name or "KCI" in self.standard.name) and 'mcr' in self.min_rebar_res:
-             # KCI specific formatting
-             mcr_knm = self.min_rebar_res['mcr'] / 1e6
-             limit_knm = self.min_rebar_res['limit'] / 1e6
-             ig = self.min_rebar_res['ig']
-             fr = self.min_rebar_res['fr']
-             phi_mn_knm = self.M_r / 1e6
-             
-             wsout['C32'].value = "* 최소 철근량 검토"
-             wsout['C33'].value = f"Ig = bh³ / 12 = {self.beam_b:.2f} x {self.beam_h:.2f}³ / 12 = {ig:,.0f} mm⁴"
-             wsout['C34'].value = f"fr = 0.63λ\u221a(fck) = 0.63 x 1.0 x \u221a({self.f_ck}) = {fr:.3f}"
-             wsout['C35'].value = f"Mcr = fr x Ig / yt = {fr:.3f} x {ig:,.0f} / ({self.beam_h:.2f} / 2) = {mcr_knm:,.3f} kN.m"
-             
-             compare_sign = "<" if 1.2 * mcr_knm < (4/3) * (self.Mu_nm/1e6) else "\u2265"
-             wsout['C36'].value = f"1.2Mcr = {1.2*mcr_knm:,.3f} kN.m {compare_sign} 4/3Mu = {(4/3)*(self.Mu_nm/1e6):,.3f} kN.m"
-             
-             status_min = "만족" if self.min_rebar_res['is_ok'] else "불만족"
-             ok_ng_min = "O.K" if self.min_rebar_res['is_ok'] else "N.G"
-             wsout['C37'].value = f"\u03a6Mn = {phi_mn_knm:,.3f} kN.m \u2265 {limit_knm:,.3f} kN.m  최소철근량 {status_min}, \u2234 {ok_ng_min}"
-             
-             wsout['C39'].value = "* 최대 철근비 검토"
-             rho_max = self.max_rebar_res['rho_max']
-             rho_use = self.max_rebar_res['rho_use']
-             status_max = "만족" if self.max_rebar_res['is_ok'] else "불만족"
-             ok_ng_max = "O.K" if self.max_rebar_res['is_ok'] else "N.G"
-             wsout['C40'].value = f"\u03c1max = {rho_max:.5f}"
-             wsout['C41'].value = f"\u03c1use = {rho_use:.5f} (As / bd)"
-             compare_sign_max = "<" if rho_use < rho_max else "\u2265"
-             wsout['C42'].value = f"\u03c1use {compare_sign_max} \u03c1max \u2192 철근비 {status_max}, \u2234 {ok_ng_max}"
-             
-             # Need to shift subsequent sections if needed, but let's see if we can fit. 
-             # Original Section 7 was at B39. KCI Section 6 ends at C42. 
-             # Let's shift Section 7+ by a few rows.
-             row_offset = 6
-        else:
-            wsout['C32'].value = f"ρmin : 1.4 / fy          = {self.lo_min_1:.6f} "
-            wsout['C33'].value = f"       0.25 x √fck / fy  = {self.lo_min_2:.6f},  ρmin = {self.lo_min:.6f} 적용"
-            wsout['C34'].value = f"ρmax = 0.75 x ρb = 0.75 x (0.85 x β1 x fck / fy) x (6,000 / (6,000 + fy)) = {self.lo_bal:.6f}" 
-            wsout['C35'].value = f"ρuse = As / ( b x d ) = {self.lo_use:.6f} " 
-            if self.lo_use >= self.lo_min :
-                if self.lo_use < self.lo_max :
-                    wsout['C36'].value = f"ρmax ≥ ρuse ≥ ρmin --> 최소철근비, 최대철근비 만족   ∴ O.K"
-                else:
-                    wsout['C36'].value = f"ρmax < ρuse ≥ ρmin --> 최소철근비 만족, 최대 철근비 불만족   ∴ N.G"
-            else :
-                if self.lo_use < self.lo_max :
-                    wsout['C36'].value = f"ρmax ≥ ρuse < ρmin --> 최소철근비 불만족,  최대 철근비 만족   ∴ N.G"
-                    if self.lo_use >= self.lo_min_3 :
-                        wsout['C37'].value = f"ρuse ≥ 4 x ρreq / 3 = {self.lo_min_3:.6f} --> 최소철근비 만족   ∴ O.K"
-                    else :
-                        wsout['C37'].value = f"ρuse < 4 x ρreq / 3 = {self.lo_min_3:.6f} --> 최소철근비 불만족   ∴ N.G"
-                else :    
-                    wsout['C36'].value = f"ρmax < ρuse < ρmin --> 최소철근비, 최대 철근비 불만족   ∴ N.G"
-            row_offset = 0
-
-        # Section 7: Design Flexural Strength Calculation
-        base_s7 = 39 + row_offset
-        wsout[f'B{base_s7}'].value = "7) 설계 휨강도 산정"
-        wsout[f'C{base_s7+1}'].value = f"a = As x fy / (0.85 x fck x b) = {self.a:.3f}mm"
-        wsout[f'C{base_s7+2}'].value = f"Ø Mn = Øf x As x fy x (d - a / 2)"
-        wsout[f'C{base_s7+3}'].value = f"     = {self.pi_f_r:.2f} x {self.as_use:.1f} x {self.f_y} x ({self.d_eff:.1f} - {self.a:.3f} / 2)"
-        if self.M_r > self.Mu_nm:
-            wsout[f'C{base_s7+4}'].value = f"     = {self.M_r:.1f} N.mm ≥ Mu = {self.Mu_nm:.1f} N.mm  ∴ O.K  [S.F = {self.M_sf:.3f}]"
-        else:
-            wsout[f'C{base_s7+4}'].value = f"     = {self.M_r:.1f} N.mm < Mu = {self.Mu_nm:.1f} N.mm  ∴ N.G  [S.F = {self.M_sf:.3f}]"
-
-        # Section 10: Shear Check
-        wsout['B45'].value ="10) 전단검토"
-        wsout['C46'].value =f"Φ Vc = Φv x √fck x b x d / 6"
-        wsout['C47'].value =f"    = {self.pi_v:.2f} x √{self.f_ck} x {self.beam_b} x {self.d_eff_v:.1f} / 6 = {self.pi_V_c:.1f} N"
-        if self.pi_V_c >= self.Vu_n :
-            wsout['C48'].value =f"Φ Vc ≥ Vu = {self.Vu_n:.1f} N  ∴ 전단보강 불필요"
-        else :
-            wsout['C48'].value =f"Φ Vc < Vu = {self.Vu_n:.1f} N  ∴ 전단보강 필요"
-            wsout['C50'].value =f"Av_req = ( {self.Vu_n/1000:.3f} - {self.pi_V_c/1000:.3f} ) x {self.av_space:.1f} / ( {self.f_y} x {self.d_eff_v:.1f} x {self.pi_v:.2f}) = {self.av_req:.3f} mm²"
-            wsout['C51'].value =f"Av_use = {self.av_use:.3f} mm² ( {self.rebar_id}{self.av_dia} - {self.av_leg}EA,  C.T.C {self.av_space} mm )"
-            if self.av_space > self.av_space_min :
-                wsout['C52'].value =f"사용간격 {self.av_space} mm > 최소간격 = min(60cm, 0.5D) = {self.av_space_min:.3f}  ∴ N.G"
-            else :
-                wsout['C52'].value =f"사용간격 {self.av_space}mm ≤ 최소간격 = min(60cm, 0.5D) = {self.av_space_min:.3f}  ∴ O.K"
-            wsout['C54'].value =f"Vs = {self.av_use:.3f} x {self.f_y:.1f} x {self.d_eff_v:.1f} / {self.av_space} = {self.V_s:.1f} N "
-            wsout['C55'].value =f"Vs_max = 2 x √{self.f_ck:.1f} / 3 x {self.beam_b} x {self.d_eff_v:.3f} "
-
-            if self.V_s <= self.V_s_max :
-                wsout['C56'].value =f"       = {self.V_s_max:.1f} N ≤ Vs = {self.V_s:.1f} N  ∴ O.K" 
-            else :
-                wsout['C56'].value =f"       = {self.V_s_max:.1f} N > Vs = {self.V_s:.1f} N  ∴ N.G" 
-
-            if self.pi_V_n >= self.Vu_n :
-                wsout['C57'].value =f" ΦVn = {self.pi_v:.2f} x ( {self.V_c:.1f} + {self.V_s:.1f} ) = {self.pi_V_n:.3f} N ≥ Vu = {self.Vu_n:.1f} N  ∴ O.K" 
-            else :
-                wsout['C57'].value =f" ΦVn = {self.pi_v:.2f} x ( {self.V_c:.1f} + {self.V_s:.1f} ) = {self.pi_V_n:.3f} N < Vu = {self.Vu_n:.1f} N  ∴ N.G"
-            
-        # Section 11: Crack Control
-        wsout['B59'].value ="11) 균열검토"
-        wsout['C60'].value =f"① 응력 산정"
-        wsout['D61'].value =f"fs = M / [As x (d - χ/3)] = {self.Ms_nm:.1f} / [ {self.as_use:.3f} x ( {self.d_eff:.3f} - {self.chi_o:.2f} / 3 )] "
-        wsout['D62'].value =f"   =  {self.f_s:.3f} MPa"
-        wsout['D63'].value =f"χ = -n x As / b + n x As / b x √ [ 1 + 2 x b x d / ( n x As ) ]"
-        wsout['D64'].value =f"  = -{self.nr:.1f} x {self.as_use:.1f} / {self.beam_b} + {self.nr:.1f} x {self.as_use:.1f} / {self.beam_b} x √ [1 + 2 x {self.beam_b} x {self.d_eff:.3f} / ({self.nr:.1f} x {self.as_use:.1f})]"
-        wsout['D65'].value =f"  = {self.chi_o:.3f} mm"
-        wsout['D66'].value = f"사용철근량 = {self.as_use:.3f} mm²  (철근군 평균도심 : {self.d_c:.1f} mm)"
-        wsout['D67'].value = f"      1단 : {self.rebar_id}{self.as_dia1}-{self.as_num1:.1f}EA, 2단 : {self.rebar_id}{self.as_dia2}-{self.as_num2:.1f}EA, 3단 : {self.rebar_id}{self.as_dia3}-{self.as_num3:.1f}EA"
-        
-        wsout['C69'].value =f"② 철근의 최대 중심간격"
-        wsout['D70'].value =f"강재의 부식에 대한 환경조건은 『 {self.crack_case} 』 적용"
-        wsout['D71'].value =f"Cc = {self.dc_1:.1f} - {self.as_dia1} / 2 = {self.c_c:.2f} mm"
-        wsout['D72'].value =f"여기서 Cc ; 인장철근이나 긴장재의 표면과 콘크리트 표면사이의 두께(mm)"
-        wsout['D74'].value =f"Smin : 375 x (Kcr / fs) - 2.5 x Cc = 375 x ({self.k_cr} / {self.f_s:.3f}) - 2.5 x {self.c_c:.3f} = {self.s_min_1:.3f} mm"
-        wsout['D75'].value =f"       300 x (Kcr / fs) = 300 x ({self.k_cr} / {self.f_s:.3f}) = {self.s_min_2:.3f} mm"
-        wsout['D76'].value =f"여기서 Kcr = {self.k_cr} ( 철근 간격을 통한 균열 검증에서 철근의 노출 조건을 고려한 계수 )" 
-        wsout['D77'].value =f"∴ Sa는 작은 값인 {self.s_min:.3f} mm 를 적용 "
-        
-        if self.s_min >= self.s_use :
-            wsout['D78'].value =f" Sa = {self.s_min:.3f} mm  ≥ suse = {self.s_use:.3f} mm  ∴ O.K" 
-        else :
-            wsout['D78'].value =f" Sa = {self.s_min:.3f} mm  < suse = {self.s_use:.3f} mm  ∴ N.G"
-
-    def generate_text_report(self):
-        self.calculate()
-        
-        # Header with Design Standard
-        header = []
-        header.append("=" * 75)
-        header.append(f"{self.standard.name:^75}")
-        header.append(f"{'강도설계법(USD)에 의한 휨모멘트 검토':^75}")
-        header.append("=" * 75)
-        header.append("")
-
-        # 1) 단면제원 및 설계가정
-        sec1 = []
-        sec1.append("1) 단면제원 및 설계가정")
-        sec1.append(f"   fck = {self.f_ck:.1f} MPa, fy = {self.f_y:.1f} MPa, Øf = {self.pi_f_r:.2f}, Øv = {self.pi_v:.2f}, Es = {self.E_s:.0f} MPa")
-        sec1.append("   " + "-"*75)
-        sec1.append(f"   | {'B(mm)':^8} | {'H(mm)':^8} | {'d(mm)':^8} | {'피복(mm)':^8} | {'Mu(N.mm)':^12} | {'Vu(N)':^10} | {'Ms(N.mm)':^10} |")
-        sec1.append("   " + "-"*75)
-        sec1.append(f"   | {self.beam_b:^8.0f} | {self.beam_h:^8.0f} | {self.d_eff:^8.1f} | {self.dc_1:^8.1f} | {self.Mu_nm:^12.0f} | {self.Vu_n:^10.0f} | {self.Ms_nm:^10.0f} |")
-        sec1.append("   " + "-"*75)
-        
-        # 2) 콘크리트 재료상수
-        sec2 = []
-        sec2.append("2) 콘크리트 재료상수")
-        sec2.append(f"   β1   : 등가 사각형 응력 블록의 깊이계수           = {self.beta_1:.3f}")
-        
-        # 3) 강도감소계수(Ø) 산정
-        sec3 = []
-        sec3.append("3) 강도감소계수(Ø) 산정")
-        sec3.append(f"   T = As x fy = {self.as_use:.3f} x {self.f_y:.3f} = {self.tension_force:.1f} N")
-        sec3.append(f"   C = 0.85 x fck x a x b = 0.85 x {self.f_ck:.3f} x a x {self.beam_b:.3f} = {0.85*self.f_ck*self.beam_b:.1f} x a")
-        sec3.append(f"   T = C 이므로, a = {self.a:.3f} mm, c = a / β1 = {self.a:.3f} / {self.beta_1:.3f} = {self.c:.3f} mm")
-        sec3.append(f"   εy = fy / Es = {self.f_y:.1f} / {self.E_s:.0f} = {self.epsilon_y:.5f}")
-        sec3.append(f"   εt = 0.00300 x (dt - c) / c = 0.00300 x ({self.dt:.3f} - {self.c:.3f}) / {self.c:.3f} = {self.epsilon_t:.5f}")
-        compare_op = "≥" if self.epsilon_t >= 0.005 else "<"
-        sec3.append(f"   εt {compare_op} 0.0050 이므로 {self.epsilon_t_result}이며, Ø = {self.pi_f_r:.2f} 를 적용한다")
-
-        # 4) 필요철근량 산정
-        sec4 = []
-        sec4.append("4) 필요철근량 산정")
-        sec4.append("   Mu / Øf = As x fy x (d - a / 2)              ---------------- ①")
-        sec4.append("   a = As x fy / (0.85 x fck x b)               ---------------- ②")
-        sec4.append("   식②를 식①에 대입하여 이차방정식으로 As를 구한다")
-        sec4.append("           fy²                                Mu")
-        sec4.append(f"   ------------------ As² - fy x d x As + ------ = 0 ,  Asreq = {self.as_req:.3f} mm²")
-        sec4.append("    2 x 0.85 x fck x b                         Øf")
-
-        # 5) 사용철근량
-        sec5 = []
-        usage_ratio = self.as_use / self.as_req if self.as_req > 0 else 0
-        sec5.append(f"5) 사용철근량 : Asuse = {self.as_use:.1f} mm², 철근도심 : dc_avg = {self.d_c:.1f}mm, [ 사용율 = {usage_ratio:.3f} ]")
-        sec5.append(f"   1단 : D {self.as_dia1} - {self.as_num1} EA (= {self.as_use1:.1f} mm², dc1 = {self.dc_1:.1f} mm)")
-        sec5.append(f"   2단 : D {self.as_dia2} - {self.as_num2} EA (= {self.as_use2:.1f} mm², dc2 = {self.dc_2:.1f} mm)")
-        sec5.append(f"   3단 : D {self.as_dia3} - {self.as_num3} EA (= {self.as_use3:.1f} mm², dc3 = {self.dc_3:.1f} mm)")
-
-        # 6) 철근비 검토
-        sec6 = []
-        sec6.append("6) 철근비 검토")
-        
-        if ("콘크리트" in self.standard.name or "KCI" in self.standard.name) and 'mcr' in self.min_rebar_res:
-            # Special formatting for KCI based on image
-            mcr_knm = self.min_rebar_res.get('mcr', 0) / 1e6
-            limit_knm = self.min_rebar_res.get('limit', 0) / 1e6
-            ig = self.min_rebar_res.get('ig', 0)
-            fr = self.min_rebar_res.get('fr', 0)
-            phi_mn_knm = self.M_r / 1e6
-            
-            sec6.append("   * 최소 철근량 검토")
-            sec6.append(f"     Ig = bh³ / 12 = {self.beam_b:.2f} x {self.beam_h:.2f}³ / 12 = {ig:,.0f} mm⁴")
-            sec6.append(f"     fr = 0.63λ\u221a(fck) = 0.63 x 1.0 x \u221a({self.f_ck}) = {fr:.3f}")
-            sec6.append(f"     Mcr = fr x Ig / yt = {fr:.3f} x {ig:,.0f} / ({self.beam_h:.2f} / 2) = {mcr_knm:,.3f} kN.m")
-            compare_sign = "<" if 1.2 * mcr_knm < (4/3) * (self.Mu_nm/1e6) else "\u2265"
-            sec6.append(f"     1.2Mcr = {1.2*mcr_knm:,.3f} kN.m {compare_sign} 4/3Mu = {(4/3)*(self.Mu_nm/1e6):,.3f} kN.m")
-            status_min = "만족" if self.min_rebar_res['is_ok'] else "불만족"
-            ok_ng_min = "O.K" if self.min_rebar_res['is_ok'] else "N.G"
-            sec6.append(f"     \u03a6Mn = {phi_mn_knm:,.3f} kN.m \u2265 {limit_knm:,.3f} kN.m  최소철근량 {status_min}, \u2234 {ok_ng_min}")
-            sec6.append("")
-            sec6.append("   * 최대 철근비 검토")
-            rho_max = self.max_rebar_res['rho_max']
-            rho_use = self.max_rebar_res['rho_use']
-            status_max = "만족" if self.max_rebar_res['is_ok'] else "불만족"
-            ok_ng_max = "O.K" if self.max_rebar_res['is_ok'] else "N.G"
-            sec6.append(f"     \u03c1max = {rho_max:.5f}")
-            sec6.append(f"     \u03c1use = As / bd = {rho_use:.5f}")
-            compare_sign_max = "<" if rho_use < rho_max else "\u2265"
-            sec6.append(f"     \u03c1use {compare_sign_max} \u03c1max \u2192 철근비 {status_max}, \u2234 {ok_ng_max}")
-        else:
-            sec6.append(f"   \u03c1min : 1.4 / fy          = {self.lo_min_1:.6f}")
-            sec6.append(f"          0.25 x \u221afck / fy  = {self.lo_min_2:.6f}, \u03c1min = {self.lo_min:.6f} 적용")
-            sec6.append(f"   \u03c1max = 0.75 x \u03c1b = 0.75 x (0.85 x \u03b21 x fck / fy) x (6000 / (6000 + fy)) = {self.lo_max:.6f}")
-            sec6.append(f"   \u03c1use = As / ( b x d ) = {self.lo_use:.6f}")
-            
-            check_msg = ""
-            if self.lo_use >= self.lo_min:
-                if self.lo_use <= self.lo_max:
-                    check_msg = "\u03c1max \u2265 \u03c1use \u2265 \u03c1min --> 최소철근비, 최대철근비 만족   \u2234 O.K"
-                else:
-                    check_msg = "\u03c1max < \u03c1use \u2265 \u03c1min --> 최소철근비 만족, 최대철근비 불만족   \u2234 N.G"
-            else:
-                if self.lo_use >= self.lo_min_3:
-                    check_msg = f"\u03c1use < \u03c1min 이나, \u03c1use \u2265 4/3 x \u03c1req ({self.lo_min_3:.6f}) 만족   \u2234 O.K"
-                else:
-                    check_msg = f"\u03c1use < \u03c1min 이며, \u03c1use < 4/3 x \u03c1req ({self.lo_min_3:.6f}) 불만족   \u2234 N.G"
-            sec6.append(f"   {check_msg}")
-
-        # 7) 설계 휨강도 산정
-        sec7 = []
-        sec7.append("7) 설계 휨강도 산정")
-        sec7.append(f"   a = As x fy / (0.85 x fck x b) = {self.a:.3f} mm")
-        sec7.append(f"   Ø Mn = Øf x As x fy x (d - a / 2)")
-        sec7.append(f"        = {self.pi_f_r:.2f} x {self.as_use:.1f} x {self.f_y} x ({self.d_eff:.1f} - {self.a:.3f} / 2)")
-        res_f = "O.K" if self.M_r >= self.Mu_nm else "N.G"
-        sf = self.M_sf
-        sec7.append(f"        = {self.M_r:.1f} N.mm ───> {res_f} (Mu = {self.Mu_nm:.1f} N.mm) [S.F = {sf:.3f}]")
-
-        # Combined Flexure (for total or tab)
-        flexure_all = []
-        flexure_all.extend(header)
-        flexure_all.extend(sec1); flexure_all.append("")
-        flexure_all.extend(sec2); flexure_all.append("")
-        flexure_all.extend(sec3); flexure_all.append("")
-        flexure_all.extend(sec4); flexure_all.append("")
-        flexure_all.extend(sec5); flexure_all.append("")
-        flexure_all.extend(sec6); flexure_all.append("")
-        flexure_all.extend(sec7)
-
-        # 8/10) 전단력 검토 (이미지 템플릿 기반 상세 버전)
-        shear = []
-        shear.append("10) 전단검토")
-        shear.append(f"  \u03a6 Vc = \u03a6v x \u221afck x b x d / 6")
-        shear.append(f"     = {self.pi_v:.2f} x \u221a{self.f_ck:.1f} x {self.beam_b:.1f} x {self.d_eff_v:.1f} / 6 = {self.pi_V_c:.1f} N")
-        
-        if self.pi_V_c >= self.Vu_n:
-            shear.append(f"  \u03a6 Vc \u2265 Vu = {self.Vu_n:.1f} N  \u2234 전단보강 불필요")
-        else:
-            shear.append(f"  \u03a6 Vc < Vu = {self.Vu_n:.1f} N  \u2234 전단보강 필요")
-            shear.append("")
-            shear.append(f"  Av_req = ( {self.Vu_n/1e3:.3f} - {self.pi_V_c/1e3:.3f} ) x {self.av_space:.1f} / ( {self.f_y:.1f} x {self.d_eff_v:.1f} x {self.pi_v:.2f})")
-            shear.append(f"         = {self.av_req:.3f} mm\u00b2")
-            shear.append(f"  Av_use = {self.av_use:.3f} mm\u00b2  ( {self.rebar_id}{self.av_dia} - {self.av_leg}EA,  C.T.C {self.av_space:.1f} mm )")
-            
-            res_space = "O.K" if self.av_space <= self.av_space_min else "N.G"
-            shear.append(f"  사용간격 {self.av_space:.1f} mm > 최소간격 = min(60cm, 0.5D) = {self.av_space_min:.3f}  \u2234 {res_space}")
-            shear.append("")
-            shear.append(f"  Vs = {self.av_use:.3f} x {self.f_y:.1f} x {self.d_eff_v:.1f} / {self.av_space:.1f} = {self.V_s:.1f} N")
-            if "콘크리트" in self.standard.name or "KCI" in self.standard.name:
-                shear.append(f"  Vs_max = 0.2 x (1 - fck / 250) x fck x b x d")
-                shear.append(f"         = 0.2 x (1 - {self.f_ck:.1f}/250) x {self.f_ck:.1f} x {self.beam_b:.1f} x {self.d_eff_v:.1f}")
-            else:
-                shear.append(f"  Vs_max = 2 x \u221a{self.f_ck:.1f} / 3 x {self.beam_b:.1f} x {self.d_eff_v:.1f}")
-            res_vmax = "O.K" if self.V_s <= self.V_s_max else "N.G"
-            shear.append(f"         = {self.V_s_max:.1f} N \u2264 Vs = {self.V_s:.1f} N  \u2234 {res_vmax}")
-            
-            res_v = "O.K" if self.pi_V_n >= self.Vu_n else "N.G"
-            op_v = "≥" if self.pi_V_n >= self.Vu_n else "<"
-            shear.append(f"  \u03a6 Vn = {self.pi_v:.2f} x ( {self.V_c:.1f} + {self.V_s:.1f} ) = {self.pi_V_n:.3f} N {op_v} Vu = {self.Vu_n:.1f} N  \u2234 {res_v}")
-
-        # 9) 사용성(균열) 검토 (이미지 템플릿 기반 상세 버전)
-        service = []
-        service.append("=" * 75)
-        service.append(f"{self.standard.name:^75}")
-        service.append(f"{'사용성(균열) 검토':^75}")
-        service.append("=" * 75)
-        service.append("")
-        service.append("11) 균열검토")
-        service.append("  ① 응력 산정")
-        service.append(f"    fs = M / [As x (d - \u03c7/3)] = {self.Ms_nm:.1f} / [ {self.as_use:.3f} x ( {self.d_eff:.3f} - {self.chi_o:.2f} / 3 )]")
-        service.append(f"       = {self.f_s:.3f} MPa")
-        service.append(f"    \u03c7 = -n x As / b + n x As / b x \u221a [ 1 + 2 x b x d / ( n x As ) ]")
-        service.append(f"      = -{self.nr:.1f} x {self.as_use:.1f} / {self.beam_b} + {self.nr:.1f} x {self.as_use:.1f} / {self.beam_b} x \u221a [1 + 2 x {self.beam_b} x {self.d_eff:.3f} / ({self.nr:.1f} x {self.as_use:.1f})]")
-        service.append(f"      = {self.chi_o:.3f} mm")
-        service.append(f"    사용철근량 = {self.as_use:.3f} mm\u00b2  (철근군 평균도심 : {self.d_c:.1f} mm)")
-        service.append(f"      1단 : D {self.as_dia1} - {self.as_num1} EA, 2단 : D {self.as_dia2} - {self.as_num2} EA, 3단 : D {self.as_dia3} - {self.as_num3} EA )")
-        service.append("")
-        service.append("  ② 철근의 최대 중심간격")
-        service.append(f"    강재의 부식에 대한 환경조건은 『 {self.crack_case} 』 적용")
-        service.append(f"    Cc = {self.dc_1:.1f} - {self.as_dia1} / 2 = {self.c_c:.2f} mm")
-        service.append("    여기서 Cc ; 인장철근이나 긴장재의 표면과 콘크리트 표면사이의 두께(mm)")
-        service.append("")
-        service.append(f"    Smin : 375 x (Kcr / fs) - 2.5 x Cc = 375 x ({self.k_cr} / {self.f_s:.3f}) - 2.5 x {self.c_c:.3f} = {self.s_min_1:.3f} mm")
-        service.append(f"           300 x (Kcr / fs) = 300 x ({self.k_cr} / {self.f_s:.3f}) = {self.s_min_2:.3f} mm")
-        service.append(f"    여기서 Kcr = {self.k_cr} ( 철근 간격을 통한 균열 검증에서 철근의 노출 조건을 고려한 계수 )")
-        service.append(f"    \u2234 Sa는 작은 값인 {self.s_min:.3f} mm 를 적용")
-        res_s = "O.K" if self.s_min >= self.s_use else "N.G"
-        service.append(f"    Sa = {self.s_min:.3f} mm  \u2265 suse = {self.s_use:.3f} mm  \u2234 {res_s}")
-
-        total = []
-        total.extend(flexure_all)
-        total.append(""); total.append("")
-        total.extend(shear)
-        total.append(""); total.append("")
-        total.extend(service)
-
-        return {
-            "total": "\n".join(total),
-            "flexure": "\n".join(flexure_all),
-            "shear": "\n".join(shear),
-            "service": "\n".join(service)
-        }
+from core.rc_section_analyzer import RCSectionAnalyzer
+from reports.text_builder import TextReportBuilder
+from reports.excel_builder import ExcelReportBuilder
 
 if __name__ == "__main__":
     try:
@@ -616,10 +22,14 @@ if __name__ == "__main__":
         material = input_data.get("material", {})
         design_standard = input_data.get("design_standard", "강도설계법(도로교 설계기준, 2010)")
         
+        f_ck = material.get("fck", 35)
+        f_y = material.get("fy", 400)
+        phi_f = material.get("phi_f", 0.85)
+        phi_v = material.get("phi_v", 0.75)
+        
         if mode == "export":
             # Export mode: generate a single excel with multiple sheets
             from openpyxl import Workbook
-            import os
             import tempfile
             
             wb = Workbook()
@@ -627,30 +37,43 @@ if __name__ == "__main__":
             wb.remove(wb.active)
             
             for i, row in enumerate(input_data.get("rows", [])):
-                calc = CalcReinfoeceConcrete({"material": material, "row": row, "design_standard": design_standard})
+                beam_h = row.get("H", 0)
+                beam_b = row.get("B", 0)
+                analyzer = RCSectionAnalyzer(f_ck, f_y, design_standard, beam_h, beam_b, row, row, phi_f=phi_f, phi_v=phi_v)
+                analyzer.analyze()
+                builder = ExcelReportBuilder(analyzer)
                 sheet_name = row.get('name') if row.get('name') else f"Beam_{row.get('id', i+1)}"
-                # Sheet names are limited to 31 chars
-                calc.add_to_excel_workbook(wb, sheet_name[:31])
+                builder.add_to_workbook(wb, sheet_name[:31])
             
             temp_dir = tempfile.gettempdir()
             out_path = os.path.join(temp_dir, "Calc_As_Output.xlsx")
             wb.save(out_path)
             wb.close()
             print(json.dumps({"success": True, "file": out_path}, ensure_ascii=False))
+            
         elif mode == "report":
             # Report mode: generate text for a single row
             rows = input_data.get("rows", [])
             if not rows:
                 print(json.dumps({"error": "No rows provided"}, ensure_ascii=False))
             else:
-                calc = CalcReinfoeceConcrete({"material": material, "row": rows[0], "design_standard": design_standard})
-                print(json.dumps(calc.generate_text_report(), ensure_ascii=False))
+                row = rows[0]
+                beam_h = row.get("H", 0)
+                beam_b = row.get("B", 0)
+                analyzer = RCSectionAnalyzer(f_ck, f_y, design_standard, beam_h, beam_b, row, row, phi_f=phi_f, phi_v=phi_v)
+                analyzer.analyze()
+                builder = TextReportBuilder(analyzer)
+                print(json.dumps(builder.generate(), ensure_ascii=False))
+                
         else:
             # Standard calculation mode
             results = []
             for row in input_data.get("rows", []):
-                calc = CalcReinfoeceConcrete({"material": material, "row": row, "design_standard": design_standard})
-                results.append(calc.calculate())
+                beam_h = row.get("H", 0)
+                beam_b = row.get("B", 0)
+                analyzer = RCSectionAnalyzer(f_ck, f_y, design_standard, beam_h, beam_b, row, row, phi_f=phi_f, phi_v=phi_v)
+                analyzer.analyze()
+                results.append(analyzer.get_summary_result())
             print(json.dumps(results, ensure_ascii=False))
             
     except Exception as e:

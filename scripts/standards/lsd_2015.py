@@ -19,6 +19,9 @@ class LSD2015(BaseDesignStandard):
     def get_material_factors(self):
         return 0.65, 0.90
 
+    def get_alpha_cc(self):
+        return 0.85
+
     def get_flexure_factors(self, f_ck):
         # KDS 14 20 24 : 4.2.1.3 (3) - Equiv. Rectangular Stress Block
         if f_ck <= 50:

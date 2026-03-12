@@ -23,8 +23,11 @@ class LSD2012(BaseDesignStandard):
         return "LSD"
 
     def get_material_factors(self):
-        # fcd = fck * phi_c * alpha_cc (alpha_cc = 0.85)
-        return 0.65 * 0.85, 0.90
+        # fcd = fck * phi_c * alpha_cc
+        return 0.65, 0.90
+
+    def get_alpha_cc(self):
+        return 0.85
 
     def get_flexure_factors(self, f_ck):
         if f_ck <= 40:

@@ -320,7 +320,6 @@ export default function RCBeamAnalysisPage() {
             }, 2000);
 
             console.log("=== handleExport END (success) ===");
-            window.alert("다운로드가 시작되었습니다. 다운로드 폴더를 확인하세요.");
 
         } catch (error) {
             console.error("=== handleExport ERROR ===", error);
@@ -592,7 +591,33 @@ export default function RCBeamAnalysisPage() {
                         <div style={{ marginBottom: '10px' }}>
                             <select
                                 value={designStandard}
-                                onChange={(e) => setDesignStandard(e.target.value)}
+                                onChange={(e) => {
+                                    const newStandard = e.target.value;
+                                    setDesignStandard(newStandard);
+                                    
+                                    // Update material defaults based on standard
+                                    if (newStandard.includes("한계상태")) {
+                                        setMaterial(prev => ({ ...prev, phi_f: 0.65, phi_v: 0.90 }));
+                                    } else {
+                                        setMaterial(prev => ({ ...prev, phi_f: 0.85, phi_v: 0.75 }));
+                                    }
+
+                                    // Reset results and calculated status for all rows when standard changes
+                                    setRows(prev => prev.map(row => ({
+                                        ...row,
+                                        is_calculated: false,
+                                        as_req: 0,
+                                        as_used: 0,
+                                        as_ratio: 0,
+                                        Mr: 0,
+                                        Mr_rate: 0,
+                                        Vn: 0,
+                                        Vn_rate: 0,
+                                        V_reinf: "-",
+                                        fs: 0,
+                                        crack_status: "-"
+                                    })));
+                                }}
                                 style={{
                                     padding: '8px 12px',
                                     border: '1px solid #ccc',
@@ -618,8 +643,8 @@ export default function RCBeamAnalysisPage() {
                                 <tr>
                                     <th style={{ border: '1px solid #ccc', backgroundColor: '#f8f8f8', padding: '8px 20px', color: '#666', minWidth: '100px' }}>fck(MPa)</th>
                                     <th style={{ border: '1px solid #ccc', backgroundColor: '#f8f8f8', padding: '8px 20px', color: '#666', minWidth: '100px' }}>fy(MPa)</th>
-                                    <th style={{ border: '1px solid #ccc', backgroundColor: '#f8f8f8', padding: '8px 20px', color: '#666', minWidth: '100px' }}>Øf</th>
-                                    <th style={{ border: '1px solid #ccc', backgroundColor: '#f8f8f8', padding: '8px 20px', color: '#666', minWidth: '100px' }}>Øv</th>
+                                    <th style={{ border: '1px solid #ccc', backgroundColor: '#f8f8f8', padding: '8px 20px', color: '#666', minWidth: '100px' }}>{designStandard.includes("한계상태") ? "Øc" : "Øf"}</th>
+                                    <th style={{ border: '1px solid #ccc', backgroundColor: '#f8f8f8', padding: '8px 20px', color: '#666', minWidth: '100px' }}>{designStandard.includes("한계상태") ? "Øs" : "Øv"}</th>
                                 </tr>
                             </thead>
                             <tbody>

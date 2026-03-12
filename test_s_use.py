@@ -6,7 +6,7 @@ import os
 sys.path.append(os.path.abspath('scripts'))
 
 try:
-    from rc_beam_calc import CalcReinfoeceConcrete
+    from core.rc_section_analyzer import RCSectionAnalyzer
 except ImportError as e:
     print(f"ImportError: {e}")
     sys.exit(1)
@@ -29,8 +29,8 @@ def test_s_use():
         }
     }
     
-    calc1 = CalcReinfoeceConcrete(data_same_cover)
-    calc1.calc_service()
+    calc1 = RCSectionAnalyzer(data_same_cover["material"]["fck"], data_same_cover["material"]["fy"], data_same_cover["design_standard"], data_same_cover["row"]["H"], data_same_cover["row"]["B"], data_same_cover["row"], data_same_cover["row"], phi_s=0.85)
+    calc1.analyze()
     print(f"Case 1 (dc1=80, dc2=80, dc3=0):")
     print(f"  Expected s_use: 125.0")
     print(f"  Result s_use:   {calc1.s_use}")
@@ -50,8 +50,8 @@ def test_s_use():
         }
     }
     
-    calc2 = CalcReinfoeceConcrete(data_diff_cover)
-    calc2.calc_service()
+    calc2 = RCSectionAnalyzer(data_diff_cover["material"]["fck"], data_diff_cover["material"]["fy"], data_diff_cover["design_standard"], data_diff_cover["row"]["H"], data_diff_cover["row"]["B"], data_diff_cover["row"], data_diff_cover["row"], phi_s=0.85)
+    calc2.analyze()
     print(f"Case 2 (dc1=80, dc2=150, dc3=0):")
     print(f"  Expected s_use: 250.0")
     print(f"  Result s_use:   {calc2.s_use}")

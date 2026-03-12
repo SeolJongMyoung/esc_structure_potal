@@ -163,8 +163,8 @@ class TextReportBuilder:
         con_mat.append(f"  n      : 상승 곡선부의 형상을 나타내는 지수         = {con.n_eps:>8.2f}")
         con_mat.append(f"  \u03b5co,r  : 최대응력에 처음 도달했을때의 변형률       = {con.eps_co:>8.4f}")
         con_mat.append(f"  \u03b5cu,r  : 극한변형률                               = {con.eps_cu:>8.4f}")
-        con_mat.append(f"  \u03b1cc    : 유효계수                                   = {con.alpha_cc:>8.2f}")
-        con_mat.append(f"  fcd    : 콘크리트 설계압축강도                      = {ana.f_cd:>8.3f} MPa")
+        con_mat.append(f"  \u03b1cc    : 유효계수                                   = {ana.alpha_cc:>8.2f}")
+        con_mat.append(f"  fcd    : 콘크리트 설계압축강도 ( fck \u00d7 \u03a6c \u00d7 \u03b1cc )    = {ana.f_cd:>8.3f} MPa")
         con_mat.append(f"  fcm    : 평균압축강도 ( fck + \u0394f )                = {con.f_cm:>8.1f} MPa")
         con_mat.append(f"  Ec = 0.077 mc^1.5 \u221bfcm                          = {con.E_c:>8.1f} MPa")
         con_mat.append(f"  \u03b1      : 압축합력의 평균 응력계수                   = {ana.alpha_fac:>8.2f}")
@@ -199,16 +199,20 @@ class TextReportBuilder:
             used_as.append(f"  2단 : H {ana.as_dia2:>2} - {ana.as_num2:>3.0f} EA,  Cover = {ana.dc_2:>8.1f} mm, ( {ana.as_use2:>8.1f} mm\u00b2 )")
         used_as.append("")
 
-        # * Reinforcement Ratio
-        ratio = []
-        ratio.append("* Reinforcement Ratio")
-        ratio.append(f"  \u03c1min : 1.4 / fy \u00d7 bw \u00d7 d                      = {ana.lo_min_1 * ana.beam_b * ana.d_eff:>8.1f} mm\u00b2")
-        ratio.append(f"         0.25\u221afck / fy \u00d7 bw \u00d7 d                  = {ana.lo_min_2 * ana.beam_b * ana.d_eff:>8.1f} mm\u00b2")
-        ratio.append(f"         4 / 3 \u00d7 Asreq                       = {ana.as_req * 4/3:>8.1f} mm\u00b2")
-        ok_min = "O.K" if ana.as_use >= min(ana.lo_min * ana.beam_b * ana.d_eff, ana.as_req * 4/3) else "N.G"
-        ratio.append(f"  As_max = 0.04 \u00d7 b \u00d7 d                      = {0.04 * ana.beam_b * ana.d_eff:>8.1f} mm\u00b2")
-        ratio.append(f"  Min Reinforcement ratio - {ok_min}")
-        ratio.append("")
+        # * Reinforcement Check
+        rebar_check = []
+        rebar_check.append("* Reinforcement Check")
+        as_min_val = min(ana.lo_min * ana.beam_b * ana.d_eff, ana.as_req * 4/3)
+        as_max_val = 0.04 * ana.beam_b * ana.beam_h # Conventional 4% of gross section
+        ok_min = "O.K" if ana.as_use >= as_min_val else "N.G"
+        ok_max = "O.K" if ana.as_use <= as_max_val else "N.G"
+        
+        rebar_check.append(f"  As_max ({as_max_val:.1f}) \u2265 As_use ({ana.as_use:.1f}) \u2265 As_min ({as_min_val:.1f})")
+        rebar_check.append(f"  Max Reinforcement ratio - {ok_max} , Min Reinforcement ratio - {ok_min}")
+        
+        # Rebar spacing check
+        rebar_check.append(f"  \ucca0\uadfc \uac04\uaca9\uac80\ud1a0: s_max = min( 2h, 250 ) = {ana.s_detailing_max:.0f} \u2265 s = {ana.s_use:.0f} mm  {ana.s_detailing_ok} ( \ub3c4.\uc124.\uae30 5.12.3.1 )")
+        rebar_check.append("")
 
         # * Moment check
         mom = []
@@ -227,30 +231,31 @@ class TextReportBuilder:
         shr.append(f"  {'전단보강 불필요' if ana.pi_V_c >= ana.Vu_n else '전단보강 필요 !!'}")
         shr.append("")
         
-        # Stirrup check details if needed
-        shr.append("* 전단철근량 검토")
-        shr.append("  Vsd = (\u03a6s \u00d7 fyv \u00d7 Av \u00d7 z / s) \u00d7 cot\u03b8")
-        z_val = 0.9 * ana.d_eff
-        shr.append(f"  z : 단면 내부 팔길이 (0.9 d)               = {z_val:>8.2f} mm")
-        if hasattr(ana, 'v_theta'):
-            shr.append(f"  \u03b8 : 복부 압축스트럿의 각도                       = {ana.v_theta:>8.2f} \u00b0")
-            shr.append(f"  cot\u03b8 = {ana.v_cot_theta:>8.3f}")
-        
-        av_use = ana.rebar.get_area(ana.av_dia) * ana.av_leg
-        shr.append(f"  Av_use  = {av_use:>8.1f} mm\u00b2 ({ana.av_dia} - {ana.av_leg:.0f} EA, C.T.C {ana.av_space:.0f} mm)")
-        shr.append(f"  Vsd = {ana.V_s/1e3:>8.2f} kN")
-        shr.append(f"  Vd_Max = {ana.V_s_max/1e3:>8.2f} kN")
-        res_v = "O.K" if (ana.pi_V_c + ana.V_s) >= ana.Vu_n else "N.G"
-        shr.append(f"  Vd = Vcd + Vsd = {(ana.pi_V_c + ana.V_s)/1e3:>8.2f} kN  \u2234 {res_v}")
-        shr.append("")
-
-        # * 공방향 철근의 추가인장력 검토
         add_reb = []
-        add_reb.append("* 공방향 철근의 추가인장력 검토")
-        add_reb.append(f"  \u0394T = 0.5 \u00d7 Vu \u00d7 cot\u03b8 = {ana.delta_t/1000:>8.2f} kN")
-        add_reb.append(f"  \u0394TB = (Mr - Mu) / z = {ana.delta_tb/1000:>8.2f} kN")
-        res_t = "O.K" if (ana.delta_t <= ana.delta_tb) or (ana.delta_t <= 0) else "N.G"
-        add_reb.append(f"  \u0394T {'\u2264' if res_t=='O.K' else '>'} \u0394TB  \u2234 {res_t}")
+        # Stirrup check details if needed
+        if ana.pi_V_c < ana.Vu_n:
+            shr.append("* 전단철근량 검토")
+            shr.append("  Vsd = (\u03a6s \u00d7 fyv \u00d7 Av \u00d7 z / s) \u00d7 cot\u03b8")
+            z_val = 0.9 * ana.d_eff
+            shr.append(f"  z : 단면 내부 팔길이 (0.9 d)               = {z_val:>8.2f} mm")
+            if hasattr(ana, 'v_theta'):
+                shr.append(f"  \u03b8 : 복부 압축스트럿의 각도                       = {ana.v_theta:>8.2f} \u00b0")
+                shr.append(f"  cot\u03b8 = {ana.v_cot_theta:>8.3f}")
+            
+            av_use = ana.rebar.get_area(ana.av_dia) * ana.av_leg
+            shr.append(f"  Av_use  = {av_use:>8.1f} mm\u00b2 ({ana.av_dia} - {ana.av_leg:.0f} EA, C.T.C {ana.av_space:.0f} mm)")
+            shr.append(f"  Vsd = {ana.V_s/1e3:>8.2f} kN")
+            shr.append(f"  Vd_Max = {ana.V_s_max/1e3:>8.2f} kN")
+            res_v = "O.K" if (ana.pi_V_c + ana.V_s) >= ana.Vu_n else "N.G"
+            shr.append(f"  Vd = Vcd + Vsd = {(ana.pi_V_c + ana.V_s)/1e3:>8.2f} kN  \u2234 {res_v}")
+            shr.append("")
+
+            # * 종방향 철근의 추가인장력 검토
+            add_reb.append("* 종방향 철근의 추가인장력 검토")
+            add_reb.append(f"  \u0394T = 0.5 \u00d7 Vu \u00d7 cot\u03b8 = {ana.delta_t/1000:>8.2f} kN")
+            add_reb.append(f"  \u0394TB = (Mr - Mu) / z = {ana.delta_tb/1000:>8.2f} kN")
+            res_t = "O.K" if (ana.delta_t <= ana.delta_tb) or (ana.delta_t <= 0) else "N.G"
+            add_reb.append(f"  \u0394T {'\u2264' if res_t=='O.K' else '>'} \u0394TB  \u2234 {res_t}")
 
         total = []
         total.extend(header)
@@ -259,7 +264,7 @@ class TextReportBuilder:
         total.extend(reb_mat)
         total.extend(req_as)
         total.extend(used_as)
-        total.extend(ratio)
+        total.extend(rebar_check)
         total.extend(mom)
         total.extend(shr)
         total.extend(add_reb)

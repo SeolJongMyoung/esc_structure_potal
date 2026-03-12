@@ -8,7 +8,7 @@ class RCSectionAnalyzer:
     핵심 연산 모듈 (단면력 및 철근량, 사용성 검토)
     구조물의 형태(보, 기둥, 옹벽)에 상관없이 단면정보와 하중정보만으로 해석 수행
     """
-    def __init__(self, f_ck, f_y, standard_name, beam_h, beam_b, loads, rebar_data, phi_s=0.85):
+    def __init__(self, f_ck, f_y, standard_name, beam_h, beam_b, loads, rebar_data, phi_f=0.85, phi_v=None):
         self.f_ck = float(f_ck)
         self.f_y = float(f_y)
         self.standard_name = standard_name
@@ -16,16 +16,29 @@ class RCSectionAnalyzer:
         
         # Methodology selection (USD vs LSD)
         self.method = self.standard.get_concrete_method() # "USD" or "LSD"
-        self.phi_c, self.phi_s = self.standard.get_material_factors()
+        
+        # Default factors from standard
+        std_phi_c, std_phi_s = self.standard.get_material_factors()
+        
+        if self.method == "LSD":
+            # For LSD, UI's phi_f is phi_c, and phi_v is phi_s
+            self.phi_c = float(phi_f) if phi_f is not None else std_phi_c
+            self.phi_s = float(phi_v) if phi_v is not None else std_phi_s
+            self.pi_f = 1.0 # Strength reduction is handled by material factors in LSD
+            self.pi_v = 1.0 # But standard might define its own pi_v (handled in calc_shear)
+        else:
+            # For USD, UI's phi_f is strength reduction for flexure, phi_v is for shear
+            self.phi_c, self.phi_s = std_phi_c, std_phi_s
+            self.pi_f = float(phi_f)
+            self.pi_v = float(phi_v) if phi_v is not None else self.standard.get_phi_v()
+
         self.alpha_fac, self.beta_fac = self.standard.get_flexure_factors(self.f_ck)
+        self.alpha_cc = self.standard.get_alpha_cc()
         
         # Design Strengths
-        self.f_cd = self.f_ck * self.phi_c
+        self.f_cd = self.f_ck * self.phi_c * self.alpha_cc
         self.f_yd = self.f_y * self.phi_s
         
-        self.pi_f = float(phi_s) 
-        self.pi_v = self.standard.get_phi_v()
-
         self.rebar = KoreanRebar()
         self.con_material = ConcMaterial(f_ck=self.f_ck, method=self.method)
         self.rebar_material = RebarMaterial(f_y=self.f_y)
@@ -230,12 +243,25 @@ class RCSectionAnalyzer:
         
         if self.as_use <= 0:
             self.crack_status = "-"
+            self.s_detailing_ok = "-"
         else:
             self.crack_status = "OK" if self.s_use <= self.s_min else "NG"
+            # Detailing check based on user request: s_max = min(2h, 250)
+            self.s_detailing_max = min(2 * self.beam_h, 250)
+            self.s_detailing_ok = "O.K" if self.s_use <= self.s_detailing_max else "N.G"
 
         return self  # Return self so reports can access calculated properties
 
     def get_summary_result(self):
+        # In LSD, we want to return phi_c and phi_s back to the UI's phi_f and phi_v fields
+        # to prevent them from being reset to 1.0 (internal pi_f/pi_v).
+        if self.method == "LSD":
+            ret_phi_f = self.phi_c
+            ret_phi_v = self.phi_s
+        else:
+            ret_phi_f = self.pi_f_r
+            ret_phi_v = self.pi_v
+
         return {
             "as_req": round(self.as_req, 1) if hasattr(self, 'as_req') else 0,
             "as_used": round(self.as_use, 1),
@@ -247,8 +273,8 @@ class RCSectionAnalyzer:
             "V_reinf": getattr(self, 'v_reinf', "-"),
             "fs": round(self.f_s, 1) if hasattr(self, 'f_s') else 0,
             "crack_status": getattr(self, 'crack_status', "-"),
-            "phi_f": round(self.pi_f_r, 3) if hasattr(self, 'pi_f_r') else 0,
-            "phi_v": round(self.pi_v, 3) if hasattr(self, 'pi_v') else 0,
+            "phi_f": round(ret_phi_f, 3),
+            "phi_v": round(ret_phi_v, 3),
             "min_rebar_ok": getattr(self, 'min_rebar_res', {}).get('is_ok', False),
             "max_rebar_ok": getattr(self, 'max_rebar_res', {}).get('is_ok', False)
         }

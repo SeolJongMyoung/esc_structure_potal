@@ -68,13 +68,16 @@ class BaseDesignStandard(ABC):
         """최소 철근량 검토 (기본 로직)"""
         f_ck = calc_data['f_ck']
         f_y = calc_data['f_y']
+        b = calc_data['b']
+        d = calc_data['d']
         
-        lo_min_1 = 1.4 / f_y
-        lo_min_2 = 0.25 * math.sqrt(f_ck) / f_y
+        lo_min_1 = 1.4 / f_y if f_y > 0 else 0
+        lo_min_2 = 0.25 * math.sqrt(f_ck) / f_y if f_y > 0 else 0
         lo_min = max(lo_min_1, lo_min_2)
         
-        lo_use = calc_data['as_use'] / (calc_data['b'] * calc_data['d'])
-        lo_min_3 = (4/3) * (calc_data['as_req'] / (calc_data['b'] * calc_data['d']))
+        divisor = (b * d)
+        lo_use = calc_data['as_use'] / divisor if divisor > 0 else 0
+        lo_min_3 = (4/3) * (calc_data['as_req'] / divisor) if divisor > 0 else 0
         
         is_ok = (lo_use >= lo_min) or (lo_use >= lo_min_3)
         return {
@@ -88,11 +91,14 @@ class BaseDesignStandard(ABC):
         """최대 철근량 검토 (기본 로직)"""
         f_ck = calc_data['f_ck']
         f_y = calc_data['f_y']
+        b = calc_data['b']
+        d = calc_data['d']
         beta_1 = self.get_beta_1(f_ck)
         
-        lo_bal = (0.85 * beta_1 * f_ck / f_y) * (6000 / (6000 + f_y))
+        lo_bal = (0.85 * beta_1 * f_ck / f_y) * (600 / (600 + f_y)) if f_y > 0 else 0
         lo_max = 0.75 * lo_bal
-        lo_use = calc_data['as_use'] / (calc_data['b'] * calc_data['d'])
+        divisor = (b * d)
+        lo_use = calc_data['as_use'] / divisor if divisor > 0 else 0
         
         is_ok = lo_use <= lo_max
         return {

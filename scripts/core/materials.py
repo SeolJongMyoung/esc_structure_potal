@@ -1,4 +1,5 @@
 from math import sin, pi, sqrt
+import math
 import pandas as pd
 
 class ConcMaterial:
@@ -16,6 +17,15 @@ class ConcMaterial:
             res_e = self._calc_E_c_lsd(f_ck, m_c)
             self.E_c = res_e["val"]
             self.E_c_latex = res_e["latex"]
+            
+            # Tensile strength for LSD (Reference: Eurocode 2 or Korean Road Bridge Standard)
+            # f_ctm = 0.3 * f_ck^(2/3) for f_ck <= 50
+            # f_ctm = 2.12 * ln(1 + f_cm/10) for f_ck > 50
+            if f_ck <= 50:
+                self.f_ctm = 0.3 * (f_ck**(2/3))
+            else:
+                self.f_ctm = 2.12 * (math.log(1 + self.f_cm/10))
+            self.f_ctk = 0.7 * self.f_ctm
             
             # Additional LSD constants for reporting
             self.alpha_cc = 0.85

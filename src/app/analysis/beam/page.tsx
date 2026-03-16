@@ -895,7 +895,7 @@ export default function RCBeamAnalysisPage() {
                                         borderBottom: activeReportTab === tab.id ? '2px solid #0066cc' : '1px solid #ccc',
                                         borderRadius: '4px 4px 0 0',
                                         cursor: 'pointer',
-                                        fontSize: '13px',
+                                        fontSize: '18px',
                                         fontWeight: activeReportTab === tab.id ? 'bold' : 'normal',
                                         color: activeReportTab === tab.id ? '#0066cc' : '#666'
                                     }}
@@ -909,7 +909,7 @@ export default function RCBeamAnalysisPage() {
                         <div style={{ flex: 1, padding: '20px', paddingRight: '10px', overflowY: 'auto', backgroundColor: '#fcfcfc' }}>
                             <pre style={{
                                 margin: 0, padding: '20px', backgroundColor: '#fff', border: '1px solid #ddd',
-                                fontFamily: '"Courier New", Courier, monospace', fontSize: '12px', lineHeight: '1.5',
+                                fontFamily: '"Courier New", Courier, monospace', fontSize: '18px', lineHeight: '1.6',
                                 whiteSpace: 'pre-wrap', color: '#333'
                             }}>
                                 {reportData[activeReportTab]}
@@ -918,9 +918,9 @@ export default function RCBeamAnalysisPage() {
 
                         {/* Modal Footer */}
                         <div style={{ padding: '15px 20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-start', gap: '10px' }}>
-                            <button onClick={copyToClipboard} style={{ padding: '8px 20px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '13px' }}>복사</button>
-                            <button onClick={saveToTextFile} style={{ padding: '8px 20px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '13px' }}>텍스트 저장</button>
-                            <button onClick={() => setIsReportModalOpen(false)} style={{ padding: '8px 20px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '13px' }}>닫기</button>
+                            <button onClick={copyToClipboard} style={{ padding: '12px 30px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>복사</button>
+                            <button onClick={saveToTextFile} style={{ padding: '12px 30px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>텍스트 저장</button>
+                            <button onClick={() => setIsReportModalOpen(false)} style={{ padding: '12px 30px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>닫기</button>
                         </div>
                     </div>
                 </div>

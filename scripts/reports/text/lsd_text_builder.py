@@ -282,7 +282,7 @@ class LSDTextBuilder:
 
         return {
             "total": "\n".join(total),
-            "flexure": "\n".join(total[:80]),
+            "flexure": "\n".join(header + sec_prop + con_mat + reb_mat + req_as + used_as + rebar_check + mom),
             "shear": "\n".join(shr + add_reb),
-            "service": "See total report for LSD details"
+            "service": "\n".join(srv) if hasattr(ana, 'service_details') else "사용성 검토 결과가 없습니다."
         }

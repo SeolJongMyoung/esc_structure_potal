@@ -39,8 +39,13 @@ export async function POST(req: NextRequest) {
             try {
                 output = await runPython('python3');
             } catch (e2) {
-                console.error('Python execution failed:', e, e2);
-                return NextResponse.json({ error: 'Python not found or script error' }, { status: 500 });
+                // If both fail, try 'py' (Windows Python Launcher)
+                try {
+                    output = await runPython('py');
+                } catch (e3) {
+                    console.error('Python execution failed:', e, e2, e3);
+                    return NextResponse.json({ error: 'Python not found or script error' }, { status: 500 });
+                }
             }
         }
 

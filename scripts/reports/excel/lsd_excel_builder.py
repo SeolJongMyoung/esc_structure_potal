@@ -107,11 +107,16 @@ class LSDExcelBuilder(BaseExcelBuilder):
         vcd = vd.get('Vcd_calc', 0)
         ws.cell(row+1, 3).value = f"Vcd = {vcd/1e3:.1f} kN ( \u03ba={vd.get('k',0):.3f}, \u03c1={vd.get('rho_l',0):.5f}, fctk={vd.get('f_ctk',0):.3f} )"
         ws.cell(row+2, 3).value = f"Ac = {vd.get('Ac', ana.beam_b * ana.beam_h):.1f} mm\u00b2, fn = {vd.get('fn',0):.3f} MPa"
-        vsd = ana.V_s / 1e3
-        ws.cell(row+3, 3).value = f"Vsd = {vsd:.1f} kN, Vd,max = {vd.get('Vdmax2',0)/1e3:.1f} kN  .. {'O.K' if vd.get('Vdmax2',0) >= ana.V_s else 'N.G'}"
-        v_tot = (ana.pi_V_c + ana.V_s) / 1e3
-        ws.cell(row+4, 3).value = f"Total Vd = {v_tot:.1f} kN \u2265 Vu = {ana.Vu:.1f} kN .. {'O.K' if v_tot >= ana.Vu else 'N.G'}"
-        return row + 6
+        
+        if ana.pi_V_c < ana.Vu_n:
+            vsd = ana.V_s / 1e3
+            ws.cell(row+3, 3).value = f"Vsd = {vsd:.1f} kN, Vd,max = {vd.get('Vdmax2',0)/1e3:.1f} kN  .. {'O.K' if vd.get('Vdmax2',0) >= ana.V_s else 'N.G'}"
+            v_tot = (ana.pi_V_c + ana.V_s) / 1e3
+            ws.cell(row+4, 3).value = f"Total Vd = {v_tot:.1f} kN \u2265 Vu = {ana.Vu:.1f} kN .. {'O.K' if v_tot >= ana.Vu else 'N.G'}"
+            return row + 6
+        else:
+            ws.cell(row+3, 3).value = f"Vcd = {ana.pi_V_c/1e3:.1f} kN \u2265 Vu = {ana.Vu:.1f} kN : 전단보강 불필요"
+            return row + 5
 
     def _write_crack_lsd(self, ws, row):
         ana = self.analyzer

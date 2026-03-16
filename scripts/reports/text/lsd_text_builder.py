@@ -163,7 +163,7 @@ class LSDTextBuilder:
         shr.append("")
 
         add_reb = []
-        if True: # Always show reinf check if it's LSD report for consistency
+        if ana.pi_V_c < ana.Vu_n:
             shr.append("* 전단철근량 검토")
             vsd_formula = "\u03a6s \u00d7 fvy \u00d7 Av \u00d7 z / s \u00d7 cot\u03b8"
             vd_max_formula = "\u03bd \u00d7 \u03a6c \u00d7 fck \u00d7 bw \u00d7 z / (cot\u03b8 + tan\u03b8)"

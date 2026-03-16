@@ -867,7 +867,7 @@ export default function RCBeamAnalysisPage() {
                     backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
                 }}>
                     <div style={{
-                        backgroundColor: '#fff', width: '90%', maxWidth: '900px', height: '85%',
+                        backgroundColor: '#fff', width: '95%', maxWidth: '1400px', height: '85%',
                         borderRadius: '8px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
                         boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
                     }}>

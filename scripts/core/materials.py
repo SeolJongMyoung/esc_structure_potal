@@ -22,7 +22,7 @@ class ConcMaterial:
             # f_ctm = 0.3 * f_ck^(2/3) for f_ck <= 50
             # f_ctm = 2.12 * ln(1 + f_cm/10) for f_ck > 50
             if f_ck <= 50:
-                self.f_ctm = 0.3 * (f_ck**(2/3))
+                self.f_ctm = 0.3 * (self.f_cm**(2/3))
             else:
                 self.f_ctm = 2.12 * (math.log(1 + self.f_cm/10))
             self.f_ctk = 0.7 * self.f_ctm

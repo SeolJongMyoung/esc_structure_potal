@@ -126,8 +126,15 @@ class LSDExcelBuilder(BaseExcelBuilder):
         as_min = sd.get('as_min_lsd', 0)
         ws.cell(row+1, 3).value = f"\u2460 최소철근량: As_min = {as_min:.2f} mm\u00b2 .. {'O.K' if ana.as_use >= as_min else 'N.G'}"
         ws.cell(row+2, 3).value = f"\u2461 철근응력: fs = {sd.get('fs', 0):.3f} MPa \u2264 fsa = {sd.get('fsa',0):.1f} MPa .. {'O.K' if sd.get('fs',0) <= sd.get('fsa',0) else 'N.G'}"
+        
+        dia_limit = sd.get('max_dia_limit', 0)
+        dia_use = ana.as_dia1
+        ws.cell(row+3, 3).value = f"\u2462 직경검토: \u03a6_use = {dia_use:.0f} mm \u2264 \u03a6_limit = {dia_limit:.1f} mm .. {'O.K' if dia_use <= dia_limit else 'N.G'}"
+        
         s_use = ana.beam_b / ana.as_num1 if ana.as_num1 > 0 else 0
-        ws.cell(row+3, 3).value = f"\u2462 간격검토: S = {s_use:.1f} mm \u2264 Sa = {sd.get('sa_limit',300):.1f} mm .. {'O.K' if s_use <= sd.get('sa_limit',300) else 'N.G'}"
+        sa_limit = sd.get('sa_limit', 300)
+        s_table = sd.get('s_table_limit', 300)
+        ws.cell(row+4, 3).value = f"\u2463 간격검토: S = {s_use:.1f} mm \u2264 Sa = min(3d, {s_table:.1f}) = {sa_limit:.1f} mm .. {'O.K' if s_use <= sa_limit else 'N.G'}"
 
     # Base overrides (unused in LSD but required to avoid mess)
     def _write_section6(self, ws): return 0

@@ -271,13 +271,21 @@ class LSDTextBuilder:
             srv.append(f"        c   : 중립축 (kd)                                       = {sd.get('c_neutral',0):.1f} mm")
             srv.append("")
             
-            # 3. Spacing check
-            srv.append("  \u2462 철근 간격검토")
+            # 3. Max Bar Diameter check
+            srv.append(f"  \u2462 철근직경검토 (KDS 24 14 21, 표 4.2-4)")
+            dia_limit = sd.get('max_dia_limit', 0)
+            dia_use = ana.as_dia1
+            srv.append(f"     \u03a6_limit = {dia_limit:.1f} mm (fs = {sd.get('fs',0):.1f} MPa 기준)")
+            srv.append(f"     \u03a6_use = {dia_use:.0f} mm \u2264 \u03a6_limit = {dia_limit:.1f} mm    \u2234 {'O.K' if dia_use <= dia_limit else 'N.G'}")
+            srv.append("")
+
+            # 4. Spacing check
+            srv.append(f"  \u2463 철근 간격검토 (KDS 24 14 21, 표 4.2-5)")
             sa_val = sd.get('sa_limit', 300.0)
-            srv.append(f"     Sa = limit({sa_val:.1f}) = {sa_val:.1f} mm")
+            s_table = sd.get('s_table_limit', 300.0)
+            srv.append(f"     Sa = min(3d, {s_table:.1f}) = {sa_val:.1f} mm")
             s_use = ana.beam_b / ana.as_num1 if ana.as_num1 > 0 else 0
             srv.append(f"     S = {ana.beam_b:.0f} / {ana.as_num1:.1f} EA = {s_use:>8.1f} mm \u2264 Sa = {sa_val:.1f} mm    \u2234 {'O.K' if s_use <= sa_val else 'N.G'}")
-            srv.append("")
             total.extend(srv)
 
         return {

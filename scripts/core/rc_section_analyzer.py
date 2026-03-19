@@ -311,7 +311,26 @@ class RCSectionAnalyzer:
         # LSD Specific serviceability details
         if self.method == "LSD":
             f_ctm = self.con_material.f_ctm
-            kc = 0.4 # For flexure
+            
+            # kc calculation (KDS 24 14 21, 4.2.3.1 (1))
+            if abs(self.Nu) < 1e-6:
+                kc = 0.4  # Pure flexure
+            else:
+                # Subjected to flexure and axial force
+                sigma_n = (self.Nu * 1e3) / (self.beam_b * self.beam_h) if (self.beam_b * self.beam_h) > 0 else 0
+                h_star = 1000.0 # 1.0m reference
+                h_ratio = self.beam_h / h_star if self.beam_h < h_star else 1.0
+                
+                if self.Nu > 0: # Compression
+                    k1 = 1.5
+                else: # Tension
+                    k1 = (2 * h_star) / (3 * self.beam_h) if self.beam_h > 0 else 1.0
+                
+                # Equation from user provided image (3.1-6 context)
+                # kc = 0.4 * [ 1 - sigma_n / (k1 * (h/h*) * fctm) ]
+                divisor = k1 * (self.beam_h / h_star) * f_ctm
+                kc = 0.4 * (1 - sigma_n / divisor) if divisor != 0 else 0.4
+                kc = min(1.0, max(0.4, kc)) # Capped at 1.0 as per image/standard
             # k for scale effect (image shows 1.0, likely simplified or for h <= 300)
             k_scale = 1.0
             if self.beam_h > 300:
@@ -327,8 +346,40 @@ class RCSectionAnalyzer:
             
             as_min_lsd = (kc * k_scale * Act * f_ctm) / self.f_y if self.f_y > 0 else 0
             
-            # sa_limit (Sa in image)
-            sa_limit = 300.0 # Standard limit
+            # 3. Max Bar Diameter Check (Table 4.2-4)
+            def get_max_dia_limit(fs):
+                # Table values based on user image (280 -> 14)
+                table = [(160, 32), (200, 25), (240, 16), (280, 14), (320, 10), (360, 8)]
+                if fs <= 160: return 32.0
+                if fs >= 360: return 8.0
+                for i in range(len(table)-1):
+                    s1, d1 = table[i]
+                    s2, d2 = table[i+1]
+                    if s1 <= fs <= s2:
+                        return d1 + (fs - s1)*(d2 - d1)/(s2 - s1)
+                return 8.0
+            
+            max_dia_limit = get_max_dia_limit(self.f_s)
+            dia_ok = self.as_dia1 <= max_dia_limit
+            
+            # 4. Max Bar Spacing Check (Table 4.2-5)
+            def get_max_spacing_table(fs):
+                # Table values based on user image
+                table = [(160, 300), (200, 250), (240, 200), (280, 150), (320, 100), (360, 50)]
+                if fs <= 160: return 300.0
+                if fs >= 360: return 50.0
+                for i in range(len(table)-1):
+                    s1, l1 = table[i]
+                    s2, l2 = table[i+1]
+                    if s1 <= fs <= s2:
+                        return l1 + (fs - s1)*(l2 - l1)/(s2 - s1)
+                return 50.0
+            
+            s_table_limit = get_max_spacing_table(self.f_s)
+            
+            # sa_limit (Indirect crack control limit: min(3*d, S_table))
+            sa_limit = min(3 * self.d_eff, s_table_limit) if self.d_eff > 0 else s_table_limit
+            self.s_min = sa_limit # Sync for analyze()
             
             self.service_details = {
                 "n": n,
@@ -344,6 +395,10 @@ class RCSectionAnalyzer:
                 "fctm": f_ctm,
                 "as_min_lsd": as_min_lsd,
                 "sa_limit": sa_limit,
+                "sa_label": f"min(3d, {s_table_limit:.1f})",
+                "max_dia_limit": max_dia_limit,
+                "dia_ok": dia_ok,
+                "s_table_limit": s_table_limit,
                 "Ms_knm": self.Ms
             }
         else:
@@ -377,7 +432,17 @@ class RCSectionAnalyzer:
             self.crack_status = "-"
             self.s_detailing_ok = "-"
         else:
-            self.crack_status = "OK" if self.s_use <= self.s_min else "NG"
+            if self.method == "LSD":
+                # Aggregate Serviceability Checks for LSD (Min Rebar, Stress, Diameter, Spacing)
+                sd = getattr(self, 'service_details', {})
+                as_min_ok = self.as_use >= sd.get('as_min_lsd', 0)
+                fs_ok = self.f_s <= sd.get('fsa', 999)
+                dia_ok = sd.get('dia_ok', True) # Max diameter check
+                s_ok = self.s_use <= self.s_min
+                self.crack_status = "OK" if (as_min_ok and fs_ok and dia_ok and s_ok) else "NG"
+            else:
+                self.crack_status = "OK" if self.s_use <= self.s_min else "NG"
+            
             # Detailing check based on user request: s_max = min(2h, 250)
             self.s_detailing_max = min(2 * self.beam_h, 250)
             self.s_detailing_ok = "O.K" if self.s_use <= self.s_detailing_max else "N.G"

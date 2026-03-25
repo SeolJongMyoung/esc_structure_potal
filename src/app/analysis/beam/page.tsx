@@ -9,7 +9,7 @@ export default function RCBeamAnalysisPage() {
         fck: 35,
         fy: 400,
         phi_f: 0.85,
-        phi_v: 0.75
+        phi_v: 0.8
     });
     const [designStandard, setDesignStandard] = useState("강도설계법(도로교 설계기준, 2010)");
     const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
@@ -84,7 +84,9 @@ export default function RCBeamAnalysisPage() {
     };
 
     const handleMaterialChange = (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
-        setMaterial(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }));
+        const val = e.target.value;
+        const value = (val === "" || val === "-" || val.endsWith(".") || (val.includes(".") && val.endsWith("0"))) ? val : (parseFloat(val) || 0);
+        setMaterial(prev => ({ ...prev, [key]: value }));
         // Reset results and calculated status for all rows when materials change
         setRows(prev => prev.map(row => ({
             ...row,
@@ -417,18 +419,46 @@ export default function RCBeamAnalysisPage() {
                 as_req: 0, as_used: 0, as_ratio: 0, Mr: 0, Mr_rate: 0, Vn: 0, Vn_rate: 0, V_reinf: "-", fs: 0, crack_status: "-",
                 is_calculating: false, is_calculated: false, selected: false
             }]);
-            setMaterial({ fck: 35, fy: 400, phi_f: 0.85, phi_v: 0.75 });
+            setMaterial({ fck: 35, fy: 400, phi_f: 0.85, phi_v: 0.8 });
             setIsFileMenuOpen(false);
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const data = { designStandard, material, rows };
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const jsonData = JSON.stringify(data, null, 2);
+        const suggestedName = `Project_${new Date().toISOString().split('T')[0]}.json`;
+
+        // Try modern File System Access API
+        if ('showSaveFilePicker' in window) {
+            try {
+                const handle = await (window as any).showSaveFilePicker({
+                    suggestedName,
+                    types: [{
+                        description: 'JSON Files',
+                        accept: { 'application/json': ['.json'] },
+                    }],
+                });
+                const writable = await handle.createWritable();
+                await writable.write(jsonData);
+                await writable.close();
+                setIsFileMenuOpen(false);
+                return;
+            } catch (err: any) {
+                if (err.name === 'AbortError') return;
+                console.error("FilePicker failed, falling back to prompt", err);
+            }
+        }
+
+        // Fallback for older browsers or if picker fails/aborted
+        const filename = prompt("파일 이름을 입력하세요", suggestedName);
+        if (!filename) return;
+
+        const blob = new Blob([jsonData], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `Project_${new Date().toISOString().split('T')[0]}.json`;
+        link.download = filename.endsWith(".json") ? filename : `${filename}.json`;
         link.click();
         URL.revokeObjectURL(url);
         setIsFileMenuOpen(false);
@@ -599,7 +629,7 @@ export default function RCBeamAnalysisPage() {
                                     if (newStandard.includes("한계상태")) {
                                         setMaterial(prev => ({ ...prev, phi_f: 0.65, phi_v: 0.90 }));
                                     } else {
-                                        setMaterial(prev => ({ ...prev, phi_f: 0.85, phi_v: 0.75 }));
+                                        setMaterial(prev => ({ ...prev, phi_f: 0.85, phi_v: 0.8 }));
                                     }
 
                                     // Reset results and calculated status for all rows when standard changes
@@ -651,8 +681,22 @@ export default function RCBeamAnalysisPage() {
                                 <tr>
                                     <td style={{ border: '1px solid #ccc', padding: '0' }}><input type="text" value={material.fck} onChange={(e) => handleMaterialChange(e, 'fck')} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none' }} /></td>
                                     <td style={{ border: '1px solid #ccc', padding: '0' }}><input type="text" value={material.fy} onChange={(e) => handleMaterialChange(e, 'fy')} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none' }} /></td>
-                                    <td style={{ border: '1px solid #ccc', padding: '0', backgroundColor: '#f5f5f5' }}><input type="text" value={material.phi_f} readOnly style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent', color: '#666' }} /></td>
-                                    <td style={{ border: '1px solid #ccc', padding: '0', backgroundColor: '#f5f5f5' }}><input type="text" value={material.phi_v} readOnly style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent', color: '#666' }} /></td>
+                                    <td style={{ border: '1px solid #ccc', padding: '0', backgroundColor: '#fff' }}>
+                                        <input 
+                                            type="text" 
+                                            value={material.phi_f} 
+                                            onChange={(e) => handleMaterialChange(e, 'phi_f')}
+                                            style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent', color: '#333' }} 
+                                        />
+                                    </td>
+                                    <td style={{ border: '1px solid #ccc', padding: '0', backgroundColor: '#fff' }}>
+                                        <input 
+                                            type="text" 
+                                            value={material.phi_v} 
+                                            onChange={(e) => handleMaterialChange(e, 'phi_v')}
+                                            style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent', color: '#333' }} 
+                                        />
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>

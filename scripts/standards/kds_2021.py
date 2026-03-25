@@ -14,9 +14,8 @@ class KDS2021(KCI2017):
         else:
             phi = 0.70 + (0.85 - 0.70) * (epsilon_t - epsilon_y) / (0.005 - epsilon_y)
             return phi, "변화구역단면"
-
     def get_phi_v(self):
-        return 0.75
+        return 0.8
 
     def get_beta_1(self, f_ck):
         return super().get_beta_1(f_ck)

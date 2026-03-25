@@ -158,7 +158,15 @@ class RCSectionAnalyzer:
         self.epsilon_y = self.f_y / self.E_s
         self.epsilon_t = 0.003 * (self.dt - self.c) / self.c if self.c > 0 else 0
 
-        self.pi_f_r, self.epsilon_t_result = self.standard.get_phi_f(self.epsilon_t, self.epsilon_y)
+        # Strength reduction factor for flexure (phi_f)
+        std_phi_f, self.epsilon_t_result = self.standard.get_phi_f(self.epsilon_t, self.epsilon_y)
+        
+        if self.method == "USD":
+            # Prioritize UI-provided phi_f override for USD/KCI
+            self.pi_f_r = self.pi_f if self.pi_f > 0 else std_phi_f
+        else:
+            # For LSD, strength reduction is handled by material factors (phi_c, phi_s)
+            self.pi_f_r = std_phi_f
 
         # Required Rebar
         # Mu = phi * As * f_yd * (d - beta_fac * c)

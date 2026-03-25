@@ -25,7 +25,7 @@ if __name__ == "__main__":
         f_ck = material.get("fck", 35)
         f_y = material.get("fy", 400)
         phi_f = material.get("phi_f", 0.85)
-        phi_v = material.get("phi_v", 0.75)
+        phi_v = material.get("phi_v", 0.8)
         
         if mode == "export":
             # Export mode: generate a single excel with multiple sheets

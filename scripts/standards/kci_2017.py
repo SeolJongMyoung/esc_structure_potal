@@ -14,9 +14,8 @@ class KCI2017(BaseDesignStandard):
         else:
             phi = 0.65 + (0.85 - 0.65) * (epsilon_t - epsilon_y) / (0.005 - epsilon_y)
             return phi, "변화구역단면"
-
     def get_phi_v(self):
-        return 0.75
+        return 0.8
 
     def check_min_rebar(self, calc_data):
         """

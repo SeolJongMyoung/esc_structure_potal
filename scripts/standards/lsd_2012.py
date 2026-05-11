@@ -141,7 +141,7 @@ class LSD2012(BaseDesignStandard):
                 "Vdmax1": Vdmax1, "Vdmax2": Vdmax2,
                 "delta_t": delta_t, "delta_tb": delta_tb,
                 "cot_alpha": cot_alpha, "alpha_deg": 90.0,
-                "s_max_1": 0.75 * D * (1 + cot_alpha), # Simplified s_max
-                "s_max_2": min(0.75 * D, 600)
+                "s_max_1": min(0.75 * D * (1 + cot_alpha), 600.0),
+                "s_max_2": min(0.75 * D, 600.0)
             }
         }

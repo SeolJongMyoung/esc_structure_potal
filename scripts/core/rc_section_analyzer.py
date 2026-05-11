@@ -54,11 +54,15 @@ class RCSectionAnalyzer:
         self.Mu = float(loads.get('Mu', 0))
         self.Vu = float(loads.get('Vu', 0))
         self.Nu = float(loads.get('Nu', 0))
-        self.Ms = float(loads.get('Ms', 0))
+        self.Ms1 = float(loads.get('Ms1', loads.get('Ms', 0)))
+        self.Ms5 = float(loads.get('Ms5', loads.get('Ms', 0)))
+        self.Ms = self.Ms1 # Legacy support
 
         self.Mu_nm = self.Mu * 1e6
         self.Vu_n = self.Vu * 1e3
-        self.Ms_nm = self.Ms * 1e6
+        self.Ms1_nm = self.Ms1 * 1e6
+        self.Ms5_nm = self.Ms5 * 1e6
+        self.Ms_nm = self.Ms1_nm
         
         # Flexure defaults
         self.as_req = 0
@@ -320,95 +324,139 @@ class RCSectionAnalyzer:
         if self.method == "LSD":
             f_ctm = self.con_material.f_ctm
             
+            # Step 1: Check if uncracked based on Ms1
+            # Z_b = b * h^2 / 6
+            Z_b = (self.beam_b * self.beam_h**2) / 6
+            f_t = self.Ms1_nm / Z_b if Z_b > 0 else 0
+            
+            is_uncracked = f_t <= f_ctm
+            
+            # Default logic for minimum rebar (applies to both branches)
             # kc calculation (KDS 24 14 21, 4.2.3.1 (1))
             if abs(self.Nu) < 1e-6:
-                kc = 0.4  # Pure flexure
+                kc = 0.4
             else:
-                # Subjected to flexure and axial force
-                sigma_n = (self.Nu * 1e3) / (self.beam_b * self.beam_h) if (self.beam_b * self.beam_h) > 0 else 0
-                h_star = 1000.0 # 1.0m reference
-                h_ratio = self.beam_h / h_star if self.beam_h < h_star else 1.0
+                f_n = (self.Nu * 1e3) / (self.beam_b * self.beam_h) if (self.beam_b * self.beam_h) > 0 else 0
+                h_star = min(self.beam_h, 1000.0) # Image 1 specifies h* = h if h < 1m, 1m if h >= 1m
+                h_ratio = self.beam_h / h_star # Computes h / h* accurately based on condition above
+                k1 = 1.5 if self.Nu > 0 else (2 * h_star) / (3 * self.beam_h) if self.beam_h > 0 else 1.0
                 
-                if self.Nu > 0: # Compression
-                    k1 = 1.5
-                else: # Tension
-                    k1 = (2 * h_star) / (3 * self.beam_h) if self.beam_h > 0 else 1.0
-                
-                # Equation from user provided image (3.1-6 context)
-                # kc = 0.4 * [ 1 - sigma_n / (k1 * (h/h*) * fctm) ]
-                divisor = k1 * (self.beam_h / h_star) * f_ctm
-                kc = 0.4 * (1 - sigma_n / divisor) if divisor != 0 else 0.4
-                kc = min(1.0, max(0.4, kc)) # Capped at 1.0 as per image/standard
-            # k for scale effect (image shows 1.0, likely simplified or for h <= 300)
+                # kc = 0.4 * [ 1 - f_n / ( k1 * (h/h*) * fct ) ] <= 1.0
+                divisor = k1 * h_ratio * f_ctm
+                kc = 0.4 * (1 - f_n / divisor) if divisor != 0 else 0.4
+                kc = min(1.0, max(0.4, kc))
+
             k_scale = 1.0
             if self.beam_h > 300:
                 k_scale = max(0.65, 1.0 - (self.beam_h - 300) * (1.0 - 0.65) / (800 - 300))
             
-            # Act: area of concrete in tension zone (simplified as b * h / 2 or using c)
-            # User image shows 475000 for 1000 width beam, likely h=950.
-            # We'll use the gross tension side area for As_min check consistency with image patterns.
-            h_tension = self.beam_h - self.chi_o
-            Act = self.beam_b * h_tension # Or b * h / 2? Image suggests 475000 is 1000 * 950 / 2.
-            # Let's use 0.5 * b * h for consistency with image's "gross tension area" feel.
+            # Act: area of concrete in tension zone (gross tension area = 0.5 * b * h)
             Act = 0.5 * self.beam_b * self.beam_h 
-            
             as_min_lsd = (kc * k_scale * Act * f_ctm) / self.f_y if self.f_y > 0 else 0
-            
-            # 3. Max Bar Diameter Check (Table 4.2-4)
-            def get_max_dia_limit(fs):
-                # Table values based on user image (280 -> 14)
-                table = [(160, 32), (200, 25), (240, 16), (280, 14), (320, 10), (360, 8)]
-                if fs <= 160: return 32.0
-                if fs >= 360: return 8.0
-                for i in range(len(table)-1):
-                    s1, d1 = table[i]
-                    s2, d2 = table[i+1]
-                    if s1 <= fs <= s2:
-                        return d1 + (fs - s1)*(d2 - d1)/(s2 - s1)
-                return 8.0
-            
-            max_dia_limit = get_max_dia_limit(self.f_s)
-            dia_ok = self.as_dia1 <= max_dia_limit
-            
-            # 4. Max Bar Spacing Check (Table 4.2-5)
-            def get_max_spacing_table(fs):
-                # Table values based on user image
-                table = [(160, 300), (200, 250), (240, 200), (280, 150), (320, 100), (360, 50)]
-                if fs <= 160: return 300.0
-                if fs >= 360: return 50.0
-                for i in range(len(table)-1):
-                    s1, l1 = table[i]
-                    s2, l2 = table[i+1]
-                    if s1 <= fs <= s2:
-                        return l1 + (fs - s1)*(l2 - l1)/(s2 - s1)
-                return 50.0
-            
-            s_table_limit = get_max_spacing_table(self.f_s)
-            
-            # sa_limit (Indirect crack control limit: min(3*d, S_table))
-            sa_limit = min(3 * self.d_eff, s_table_limit) if self.d_eff > 0 else s_table_limit
-            self.s_min = sa_limit # Sync for analyze()
-            
-            self.service_details = {
-                "n": n,
-                "rho": rho,
-                "k_neutral": k_neutral,
-                "c_neutral": self.chi_o,
-                "z_arm": z_arm,
-                "fs": self.f_s,
-                "fsa": 0.8 * self.f_y, # Stress limit
-                "kc": kc,
-                "k_scale": k_scale,
-                "Act": Act,
-                "fctm": f_ctm,
-                "as_min_lsd": as_min_lsd,
-                "sa_limit": sa_limit,
-                "sa_label": f"min(3d, {s_table_limit:.1f})",
-                "max_dia_limit": max_dia_limit,
-                "dia_ok": dia_ok,
-                "s_table_limit": s_table_limit,
-                "Ms_knm": self.Ms
-            }
+
+            if is_uncracked:
+                # UNCRACKED BRANCH - perform stress check with Ms5 on transformed uncracked section
+                num_eff = (n - 1) * self.as_use
+                total_area = self.beam_b * self.beam_h + num_eff
+                
+                # Neutral axis 'c' relative to compressive fiber (top)
+                c_na = (self.beam_b * (self.beam_h**2) / 2 + num_eff * self.d_eff) / total_area if total_area > 0 else 0
+                
+                # Moment of inertia 'I' for uncracked transformed section
+                I_uncracked = (self.beam_b * self.beam_h**3 / 12) + \
+                              (self.beam_b * self.beam_h * (c_na - self.beam_h/2)**2) + \
+                              num_eff * (self.d_eff - c_na)**2
+                
+                # Concrete stress fc and steel stress fs using Ms5
+                self.f_c = self.Ms5_nm * c_na / I_uncracked if I_uncracked > 0 else 0
+                self.f_s = n * self.Ms1_nm * (self.d_eff - c_na) / I_uncracked if I_uncracked > 0 else 0
+                
+                self.chi_o = c_na # Overwrite with uncracked neutral axis
+                
+                # In uncracked branch, spacing/diameter indirect crack limits are typically not governing or applicable,
+                # but we initialize them to acceptable values so it passes the overall aggregate check easily.
+                self.s_min = 99999 
+                
+                self.service_details = {
+                    "is_uncracked": True,
+                    "ft": f_t,
+                    "fctm": f_ctm,
+                    "Z_b": Z_b,
+                    "Ms1_knm": self.Ms1,
+                    "Ms5_knm": self.Ms5,
+                    "n": n,
+                    "c_na": c_na,
+                    "I_g": I_uncracked,
+                    "fc": self.f_c,
+                    "fca": 0.6 * self.f_ck,
+                    "fs": self.f_s,
+                    "fsa": 0.8 * self.f_y,
+                    "as_min_lsd": as_min_lsd,
+                    "kc": kc,
+                    "k_scale": k_scale,
+                    "Act": Act,
+                    "dia_ok": True # Override as per "skip crack verification"
+                }
+            else:
+                # CRACKED BRANCH - existing legacy behavior (using Ms1)
+                # Maintain previous fs calculation based on cracked arm 'z_arm' using Ms1_nm
+                z_arm = self.d_eff - self.chi_o / 3
+                self.f_s = self.Ms1_nm / (self.as_use * z_arm) if (self.as_use * z_arm) > 0 else 0
+
+                # 3. Max Bar Diameter Check
+                def get_max_dia_limit(fs):
+                    table = [(160, 32), (200, 25), (240, 16), (280, 14), (320, 10), (360, 8)]
+                    if fs <= 160: return 32.0
+                    if fs >= 360: return 8.0
+                    for i in range(len(table)-1):
+                        s1, d1 = table[i]
+                        s2, d2 = table[i+1]
+                        if s1 <= fs <= s2:
+                            return d1 + (fs - s1)*(d2 - d1)/(s2 - s1)
+                    return 8.0
+                
+                max_dia_limit = get_max_dia_limit(self.f_s)
+                dia_ok = self.as_dia1 <= max_dia_limit
+                
+                # 4. Max Bar Spacing Check
+                def get_max_spacing_table(fs):
+                    table = [(160, 300), (200, 250), (240, 200), (280, 150), (320, 100), (360, 50)]
+                    if fs <= 160: return 300.0
+                    if fs >= 360: return 50.0
+                    for i in range(len(table)-1):
+                        s1, l1 = table[i]
+                        s2, l2 = table[i+1]
+                        if s1 <= fs <= s2:
+                            return l1 + (fs - s1)*(l2 - l1)/(s2 - s1)
+                    return 50.0
+                
+                s_table_limit = get_max_spacing_table(self.f_s)
+                sa_limit = s_table_limit # Image 2 gives the exact maximum spacing limit derived from table interpolation
+                self.s_min = sa_limit 
+                
+                self.service_details = {
+                    "is_uncracked": False,
+                    "ft": f_t,
+                    "fctm": f_ctm,
+                    "Ms1_knm": self.Ms1,
+                    "Ms5_knm": self.Ms5,
+                    "n": n,
+                    "rho": rho,
+                    "k_neutral": k_neutral,
+                    "c_neutral": self.chi_o,
+                    "z_arm": z_arm,
+                    "fs": self.f_s,
+                    "fsa": 0.8 * self.f_y,
+                    "kc": kc,
+                    "k_scale": k_scale,
+                    "Act": Act,
+                    "as_min_lsd": as_min_lsd,
+                    "sa_limit": sa_limit,
+                    "sa_label": f"TableLimit({s_table_limit:.1f})",
+                    "max_dia_limit": max_dia_limit,
+                    "dia_ok": dia_ok,
+                    "s_table_limit": s_table_limit
+                }
         else:
             # Existing USD bits
             self.cr_index = self.crack_case

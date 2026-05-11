@@ -20,7 +20,7 @@ export default function RCBeamAnalysisPage() {
         {
             id: 1,
             name: "Center",
-            Mu: 1000, Vu: 50, Nu: 5, Ms: 80,
+            Mu: 1000, Vu: 50, Nu: 5, Ms1: 80, Ms5: 80,
             H: 800, B: 1000,
             dc1: 80, dia1: 25, num1: 8,
             dc2: 0, dia2: 0, num2: 0,
@@ -40,12 +40,12 @@ export default function RCBeamAnalysisPage() {
             {
                 id: prev.length > 0 ? Math.max(...prev.map(r => r.id)) + 1 : 1,
                 name: "",
-                Mu: 0, Vu: 0, Nu: 0, Ms: 0,
+                Mu: 0, Vu: 0, Nu: 0, Ms1: 0, Ms5: 0,
                 H: 0, B: 0,
                 dc1: 80, dia1: 13, num1: 0,
                 dc2: 0, dia2: 0, num2: 0,
                 dc3: 0, dia3: 0, num3: 0,
-                crack_case: "일반환경",
+                crack_case: designStandard.includes("한계상태") ? "E" : "일반환경",
                 av_dia: 0, av_leg: 0, av_space: 0,
                 as_req: 0, as_used: 0, as_ratio: 0, Mr: 0, Mr_rate: 0, Vn: 0, Vn_rate: 0, V_reinf: "-", fs: 0, crack_status: "-",
                 is_calculating: false, is_calculated: false, selected: false
@@ -58,7 +58,7 @@ export default function RCBeamAnalysisPage() {
         if (remainingRows.length === 0 && rows.length > 0) {
             // Keep at least one empty row if everything is deleted
             setRows([{
-                id: 1, name: "", Mu: 0, Vu: 0, Nu: 0, Ms: 0, H: 0, B: 0,
+                id: 1, name: "", Mu: 0, Vu: 0, Nu: 0, Ms1: 0, Ms5: 0, H: 0, B: 0,
                 dc1: 80, dia1: 13, num1: 0, dc2: 0, dia2: 0, num2: 0, dc3: 0, dia3: 0, num3: 0,
                 crack_case: "일반환경", av_dia: 0, av_leg: 0, av_space: 0,
                 as_req: 0, as_used: 0, as_ratio: 0, Mr: 0, Mr_rate: 0, Vn: 0, Vn_rate: 0, V_reinf: "-", fs: 0, crack_status: "-",
@@ -150,17 +150,26 @@ export default function RCBeamAnalysisPage() {
     const handleKeyDown = (e: React.KeyboardEvent, rowIndex: number, colIndex: number) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            // Try to find the next column in the same row
-            let nextInput = document.querySelector(`[data-row="${rowIndex}"][data-col="${colIndex + 1}"]`) as HTMLElement;
+            
+            // Iterate forward until an available column input element is found in the current row
+            let nextInput: HTMLElement | null = null;
+            let targetCol = colIndex + 1;
+            const maxCols = 25; // Upper bounds limit
+
+            while (targetCol <= maxCols && !nextInput) {
+                nextInput = document.querySelector(`[data-row="${rowIndex}"][data-col="${targetCol}"]`) as HTMLElement;
+                if (!nextInput) {
+                    targetCol++;
+                }
+            }
 
             if (!nextInput) {
-                // If last column, move to first column of the next row
+                // If no more valid columns exist in current row, wraparound to the start of the next row
                 nextInput = document.querySelector(`[data-row="${rowIndex + 1}"][data-col="0"]`) as HTMLElement;
             }
 
             if (nextInput) {
                 nextInput.focus();
-                // Auto-open select dropdown if it's a select element
                 if (nextInput.tagName === 'SELECT') {
                     try { (nextInput as any).showPicker(); } catch (err) { }
                 }
@@ -170,6 +179,20 @@ export default function RCBeamAnalysisPage() {
 
     const handleSelectFocus = (e: React.FocusEvent<HTMLSelectElement>) => {
         try { (e.target as any).showPicker(); } catch (err) { }
+    };
+
+    const handleMaterialKeyDown = (e: React.KeyboardEvent, colIndex: number) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const nextInput = document.querySelector(`[data-mat-col="${colIndex + 1}"]`) as HTMLElement;
+            if (nextInput) {
+                nextInput.focus();
+            } else {
+                // Move to the first row of section 1 if it's the last material field
+                const firstRowInput = document.querySelector(`[data-row="0"][data-col="0"]`) as HTMLElement;
+                if (firstRowInput) firstRowInput.focus();
+            }
+        }
     };
 
     const handleCalculate = async () => {
@@ -413,7 +436,7 @@ export default function RCBeamAnalysisPage() {
     const handleNew = () => {
         if (confirm("새 프로젝트를 시작하시겠습니까? 현재 입력된 데이터는 저장되지 않을 수 있습니다.")) {
             setRows([{
-                id: 1, name: "Center", Mu: 1000, Vu: 50, Nu: 5, Ms: 80, H: 800, B: 1000,
+                id: 1, name: "Center", Mu: 1000, Vu: 50, Nu: 5, Ms1: 80, Ms5: 80, H: 800, B: 1000,
                 dc1: 80, dia1: 25, num1: 8, dc2: 0, dia2: 0, num2: 0, dc3: 0, dia3: 0, num3: 0,
                 crack_case: "일반환경", av_dia: 0, av_leg: 0, av_space: 0,
                 as_req: 0, as_used: 0, as_ratio: 0, Mr: 0, Mr_rate: 0, Vn: 0, Vn_rate: 0, V_reinf: "-", fs: 0, crack_status: "-",
@@ -492,6 +515,8 @@ export default function RCBeamAnalysisPage() {
             router.push('/dashboard');
         }
     };
+
+    const isLSD = designStandard.includes("한계상태");
 
     return (
         <main style={{ minHeight: '100vh', backgroundColor: '#f0f0f0', color: '#333', display: 'flex', flexDirection: 'column' }}>
@@ -635,6 +660,7 @@ export default function RCBeamAnalysisPage() {
                                     // Reset results and calculated status for all rows when standard changes
                                     setRows(prev => prev.map(row => ({
                                         ...row,
+                                        crack_case: newStandard.includes("한계상태") ? "E" : "일반환경",
                                         is_calculated: false,
                                         as_req: 0,
                                         as_used: 0,
@@ -679,13 +705,36 @@ export default function RCBeamAnalysisPage() {
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td style={{ border: '1px solid #ccc', padding: '0' }}><input type="text" value={material.fck} onChange={(e) => handleMaterialChange(e, 'fck')} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none' }} /></td>
-                                    <td style={{ border: '1px solid #ccc', padding: '0' }}><input type="text" value={material.fy} onChange={(e) => handleMaterialChange(e, 'fy')} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none' }} /></td>
+                                    <td style={{ border: '1px solid #ccc', padding: '0' }}>
+                                        <input 
+                                            type="text" 
+                                            value={material.fck} 
+                                            onChange={(e) => handleMaterialChange(e, 'fck')} 
+                                            onKeyDown={(e) => handleMaterialKeyDown(e, 0)}
+                                            onFocus={handleFocus}
+                                            data-mat-col={0}
+                                            style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none' }} 
+                                        />
+                                    </td>
+                                    <td style={{ border: '1px solid #ccc', padding: '0' }}>
+                                        <input 
+                                            type="text" 
+                                            value={material.fy} 
+                                            onChange={(e) => handleMaterialChange(e, 'fy')} 
+                                            onKeyDown={(e) => handleMaterialKeyDown(e, 1)}
+                                            onFocus={handleFocus}
+                                            data-mat-col={1}
+                                            style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none' }} 
+                                        />
+                                    </td>
                                     <td style={{ border: '1px solid #ccc', padding: '0', backgroundColor: '#fff' }}>
                                         <input 
                                             type="text" 
                                             value={material.phi_f} 
                                             onChange={(e) => handleMaterialChange(e, 'phi_f')}
+                                            onKeyDown={(e) => handleMaterialKeyDown(e, 2)}
+                                            onFocus={handleFocus}
+                                            data-mat-col={2}
                                             style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent', color: '#333' }} 
                                         />
                                     </td>
@@ -694,6 +743,9 @@ export default function RCBeamAnalysisPage() {
                                             type="text" 
                                             value={material.phi_v} 
                                             onChange={(e) => handleMaterialChange(e, 'phi_v')}
+                                            onKeyDown={(e) => handleMaterialKeyDown(e, 3)}
+                                            onFocus={handleFocus}
+                                            data-mat-col={3}
                                             style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent', color: '#333' }} 
                                         />
                                     </td>
@@ -725,7 +777,14 @@ export default function RCBeamAnalysisPage() {
                                             <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Mu<br />(kN.m)</th>
                                             <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Vu<br />(kN)</th>
                                             <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Nu<br />(kN)</th>
-                                            <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Ms<br />(kN.m)</th>
+                                            {isLSD ? (
+                                                <>
+                                                    <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Ms1<br />(kN.m)</th>
+                                                    <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Ms5<br />(kN.m)</th>
+                                                </>
+                                            ) : (
+                                                <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '80px' }}>Ms<br />(kN.m)</th>
+                                            )}
                                             <th style={{ border: '1px solid #ddd', padding: '8px', minWidth: '130px' }}>환경조건</th>
                                         </tr>
                                     </thead>
@@ -742,13 +801,49 @@ export default function RCBeamAnalysisPage() {
                                                 <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.Mu} onChange={(e) => handleRowChange(e, idx, 'Mu')} onKeyDown={(e) => handleKeyDown(e, idx, 3)} onFocus={handleFocus} data-row={idx} data-col={3} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
                                                 <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.Vu} onChange={(e) => handleRowChange(e, idx, 'Vu')} onKeyDown={(e) => handleKeyDown(e, idx, 4)} onFocus={handleFocus} data-row={idx} data-col={4} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
                                                 <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.Nu} onChange={(e) => handleRowChange(e, idx, 'Nu')} onKeyDown={(e) => handleKeyDown(e, idx, 5)} onFocus={handleFocus} data-row={idx} data-col={5} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
-                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.Ms} onChange={(e) => handleRowChange(e, idx, 'Ms')} onKeyDown={(e) => handleKeyDown(e, idx, 6)} onFocus={handleFocus} data-row={idx} data-col={6} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} /></td>
                                                 <td style={{ border: '1px solid #eee', padding: '0' }}>
-                                                    <select value={row.crack_case} onChange={(e) => handleRowChange(e, idx, 'crack_case')} onKeyDown={(e) => handleKeyDown(e, idx, 7)} onFocus={handleSelectFocus} data-row={idx} data-col={7} style={{ width: '100%', height: '35px', border: 'none', outline: 'none', backgroundColor: 'transparent', textAlignLast: 'center', cursor: 'pointer', fontSize: '11px' }}>
-                                                        <option value="건조한 환경">건조한 환경</option>
-                                                        <option value="일반환경">일반환경</option>
-                                                        <option value="부식성 환경">부식성 환경</option>
-                                                        <option value="극심한 부식성 환경">극심한 부식성 환경</option>
+                                                    <input 
+                                                        type="text" 
+                                                        value={row.Ms1 || (row as any).Ms || ''} 
+                                                        onChange={(e) => handleRowChange(e, idx, 'Ms1')} 
+                                                        onKeyDown={(e) => handleKeyDown(e, idx, 6)} 
+                                                        onFocus={handleFocus} 
+                                                        data-row={idx} 
+                                                        data-col={6} 
+                                                        style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} 
+                                                    />
+                                                </td>
+                                                {isLSD && (
+                                                    <td style={{ border: '1px solid #eee', padding: '0' }}>
+                                                        <input 
+                                                            type="text" 
+                                                            value={row.Ms5 || (row as any).Ms || ''} 
+                                                            onChange={(e) => handleRowChange(e, idx, 'Ms5')} 
+                                                            onKeyDown={(e) => handleKeyDown(e, idx, 7)} 
+                                                            onFocus={handleFocus} 
+                                                            data-row={idx} 
+                                                            data-col={7} 
+                                                            style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none', outline: 'none', backgroundColor: 'transparent' }} 
+                                                        />
+                                                    </td>
+                                                )}
+                                                <td style={{ border: '1px solid #eee', padding: '0' }}>
+                                                    <select value={row.crack_case} onChange={(e) => handleRowChange(e, idx, 'crack_case')} onKeyDown={(e) => handleKeyDown(e, idx, 8)} onFocus={handleSelectFocus} data-row={idx} data-col={8} style={{ width: '100%', height: '35px', border: 'none', outline: 'none', backgroundColor: 'transparent', textAlignLast: 'center', cursor: 'pointer', fontSize: '11px' }}>
+                                                        {designStandard.includes("한계상태") ? (
+                                                            <>
+                                                                <option value="B">B</option>
+                                                                <option value="C">C</option>
+                                                                <option value="D">D</option>
+                                                                <option value="E">E</option>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <option value="건조한 환경">건조한 환경</option>
+                                                                <option value="일반환경">일반환경</option>
+                                                                <option value="부식성 환경">부식성 환경</option>
+                                                                <option value="극심한 부식성 환경">극심한 부식성 환경</option>
+                                                            </>
+                                                        )}
                                                     </select>
                                                 </td>
                                             </tr>
@@ -801,43 +896,43 @@ export default function RCBeamAnalysisPage() {
                                                 <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.name} readOnly style={{ width: '100%', height: '35px', padding: '0 8px', border: 'none', outline: 'none', backgroundColor: 'transparent', color: '#666' }} /></td>
                                                 
                                                 {/* Layer 1 */}
-                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.dc1} onChange={(e) => handleRowChange(e, idx, 'dc1')} onKeyDown={(e) => handleKeyDown(e, idx, 8)} onFocus={handleFocus} data-row={idx} data-col={8} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
+                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.dc1} onChange={(e) => handleRowChange(e, idx, 'dc1')} onKeyDown={(e) => handleKeyDown(e, idx, 9)} onFocus={handleFocus} data-row={idx} data-col={9} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
                                                 <td style={{ border: '1px solid #eee', padding: '0' }}>
-                                                    <select value={row.dia1} onChange={(e) => handleRowChange(e, idx, 'dia1')} onKeyDown={(e) => handleKeyDown(e, idx, 9)} onFocus={handleSelectFocus} data-row={idx} data-col={9} style={{ width: '100%', height: '35px', border: 'none' }}>
+                                                    <select value={row.dia1} onChange={(e) => handleRowChange(e, idx, 'dia1')} onKeyDown={(e) => handleKeyDown(e, idx, 10)} onFocus={handleSelectFocus} data-row={idx} data-col={10} style={{ width: '100%', height: '35px', border: 'none' }}>
                                                         {[10, 13, 16, 19, 22, 25, 29, 32, 35].map(d => <option key={d} value={d}>{d}</option>)}
                                                     </select>
                                                 </td>
-                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.num1} onChange={(e) => handleRowChange(e, idx, 'num1')} onKeyDown={(e) => handleKeyDown(e, idx, 10)} onFocus={handleFocus} data-row={idx} data-col={10} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
+                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.num1} onChange={(e) => handleRowChange(e, idx, 'num1')} onKeyDown={(e) => handleKeyDown(e, idx, 11)} onFocus={handleFocus} data-row={idx} data-col={11} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
 
                                                 {/* Layer 2 */}
-                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.dc2} onChange={(e) => handleRowChange(e, idx, 'dc2')} onKeyDown={(e) => handleKeyDown(e, idx, 11)} onFocus={handleFocus} data-row={idx} data-col={11} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
+                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.dc2} onChange={(e) => handleRowChange(e, idx, 'dc2')} onKeyDown={(e) => handleKeyDown(e, idx, 12)} onFocus={handleFocus} data-row={idx} data-col={12} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
                                                 <td style={{ border: '1px solid #eee', padding: '0' }}>
-                                                    <select value={row.dia2} onChange={(e) => handleRowChange(e, idx, 'dia2')} onKeyDown={(e) => handleKeyDown(e, idx, 12)} onFocus={handleSelectFocus} data-row={idx} data-col={12} style={{ width: '100%', height: '35px', border: 'none' }}>
+                                                    <select value={row.dia2} onChange={(e) => handleRowChange(e, idx, 'dia2')} onKeyDown={(e) => handleKeyDown(e, idx, 13)} onFocus={handleSelectFocus} data-row={idx} data-col={13} style={{ width: '100%', height: '35px', border: 'none' }}>
                                                         <option value={0}>철근없음</option>
                                                         {[10, 13, 16, 19, 22, 25, 29, 32, 35].map(d => <option key={d} value={d}>{d}</option>)}
                                                     </select>
                                                 </td>
-                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.num2} onChange={(e) => handleRowChange(e, idx, 'num2')} onKeyDown={(e) => handleKeyDown(e, idx, 13)} onFocus={handleFocus} data-row={idx} data-col={13} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
+                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.num2} onChange={(e) => handleRowChange(e, idx, 'num2')} onKeyDown={(e) => handleKeyDown(e, idx, 14)} onFocus={handleFocus} data-row={idx} data-col={14} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
 
                                                 {/* Layer 3 */}
-                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.dc3} onChange={(e) => handleRowChange(e, idx, 'dc3')} onKeyDown={(e) => handleKeyDown(e, idx, 14)} onFocus={handleFocus} data-row={idx} data-col={14} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
+                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.dc3} onChange={(e) => handleRowChange(e, idx, 'dc3')} onKeyDown={(e) => handleKeyDown(e, idx, 15)} onFocus={handleFocus} data-row={idx} data-col={15} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
                                                 <td style={{ border: '1px solid #eee', padding: '0' }}>
-                                                    <select value={row.dia3} onChange={(e) => handleRowChange(e, idx, 'dia3')} onKeyDown={(e) => handleKeyDown(e, idx, 15)} onFocus={handleSelectFocus} data-row={idx} data-col={15} style={{ width: '100%', height: '35px', border: 'none' }}>
+                                                    <select value={row.dia3} onChange={(e) => handleRowChange(e, idx, 'dia3')} onKeyDown={(e) => handleKeyDown(e, idx, 16)} onFocus={handleSelectFocus} data-row={idx} data-col={16} style={{ width: '100%', height: '35px', border: 'none' }}>
                                                         <option value={0}>철근없음</option>
                                                         {[10, 13, 16, 19, 22, 25, 29, 32, 35].map(d => <option key={d} value={d}>{d}</option>)}
                                                     </select>
                                                 </td>
-                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.num3} onChange={(e) => handleRowChange(e, idx, 'num3')} onKeyDown={(e) => handleKeyDown(e, idx, 16)} onFocus={handleFocus} data-row={idx} data-col={16} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
+                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.num3} onChange={(e) => handleRowChange(e, idx, 'num3')} onKeyDown={(e) => handleKeyDown(e, idx, 17)} onFocus={handleFocus} data-row={idx} data-col={17} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
 
                                                 {/* Stirrup */}
                                                 <td style={{ border: '1px solid #eee', padding: '0' }}>
-                                                    <select value={row.av_dia} onChange={(e) => handleRowChange(e, idx, 'av_dia')} onKeyDown={(e) => handleKeyDown(e, idx, 17)} onFocus={handleSelectFocus} data-row={idx} data-col={17} style={{ width: '100%', height: '35px', border: 'none' }}>
+                                                    <select value={row.av_dia} onChange={(e) => handleRowChange(e, idx, 'av_dia')} onKeyDown={(e) => handleKeyDown(e, idx, 18)} onFocus={handleSelectFocus} data-row={idx} data-col={18} style={{ width: '100%', height: '35px', border: 'none' }}>
                                                         <option value={0}>철근없음</option>
                                                         {[10, 13, 16, 19, 22, 25, 29, 32, 35, 38, 41, 51].map(d => <option key={d} value={d}>{d}</option>)}
                                                     </select>
                                                 </td>
-                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.av_leg} onChange={(e) => handleRowChange(e, idx, 'av_leg')} onKeyDown={(e) => handleKeyDown(e, idx, 18)} onFocus={handleFocus} data-row={idx} data-col={18} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
-                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.av_space} onChange={(e) => handleRowChange(e, idx, 'av_space')} onKeyDown={(e) => handleKeyDown(e, idx, 19)} onFocus={handleFocus} data-row={idx} data-col={19} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
+                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.av_leg} onChange={(e) => handleRowChange(e, idx, 'av_leg')} onKeyDown={(e) => handleKeyDown(e, idx, 19)} onFocus={handleFocus} data-row={idx} data-col={19} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
+                                                <td style={{ border: '1px solid #eee', padding: '0' }}><input type="text" value={row.av_space} onChange={(e) => handleRowChange(e, idx, 'av_space')} onKeyDown={(e) => handleKeyDown(e, idx, 20)} onFocus={handleFocus} data-row={idx} data-col={20} style={{ width: '100%', height: '35px', textAlign: 'center', border: 'none' }} /></td>
                                             </tr>
                                         ))}
                                     </tbody>

@@ -195,7 +195,7 @@ class LSDTextBuilder:
             
             shr.append(f"     \u03b1    : 전단철근과 부재축과의 각도               = {vd.get('alpha_deg',90):>8.2f} \u00b0")
             s_ok = "O.K" if ana.av_space <= vd.get('s_max_1',0) else "N.G"
-            shr.append(f"  Space Check : s = {ana.av_space:>8.0f} mm \u2264 s_max = 0.75 d ( 1 + cot \u03b1 ) = {vd.get('s_max_1',0):>8.0f} mm .. {s_ok}")
+            shr.append(f"  Space Check : s = {ana.av_space:>8.0f} mm \u2264 s_max = min( 0.75 d ( 1 + cot \u03b1 ), 600 ) = {vd.get('s_max_1',0):>8.0f} mm .. {s_ok}")
             
             v_total = (ana.pi_V_c + ana.V_s) / 1e3
             v_ok = "O.K" if v_total >= ana.Vu else "N.G"
@@ -235,57 +235,108 @@ class LSDTextBuilder:
             sd = ana.service_details
             srv = []
             srv.append("")
-            #srv.append("-" * 80)
-            srv.append("8) 균열 및 철근 간격 검토")
-            #srv.append("-" * 80)
+            srv.append("8) 균열 및 사용성 응력 검토")
             
-            # 1. Min Rebar
-            srv.append("  \u2460 최소철근량 검토")
-            as_min_formula = "kc \u00d7 k \u00d7 Act \u00d7 fct / fs"
-            as_min_calc = f"{sd.get('kc',0.4):.2f} \u00d7 {sd.get('k_scale',1.0):.2f} \u00d7 {sd.get('Act',0):.0f} \u00d7 {sd.get('fctm',0):.2f} / {ana.f_y:.0f}"
-            srv.append(f"     As_min = {as_min_formula}")
-            srv.append(f"            = {as_min_calc} = {sd.get('as_min_lsd',0):>8.2f} mm\u00b2")
-            
-            srv.append(f"        kc  : 균열발생 직전의 단면 내 응력 분포 상태를 반영하는 계수 = {sd.get('kc',0.4):.2f}")
-            srv.append(f"        k   : 부등 분포하는 응력의 영향을 반영하는 계수          = {sd.get('k_scale',1.0):.2f}")
-            srv.append(f"        Act : 첫 균열발생 직전 상태의 콘크리트 인장영역 단면적    = {sd.get('Act',0):.0f} mm\u00b2")
-            srv.append(f"        fct : 첫 균열 발생 시 유효 콘크리트 인장강도 (fctm)      = {sd.get('fctm',0):.2f} MPa")
-            srv.append(f"        fs  : 허용하는 철근 인장강도 (fy)                        = {ana.f_y:.0f} MPa")
-            
-            status_min = "O.K" if ana.as_use >= sd.get('as_min_lsd', 0) else "N.G"
-            srv.append(f"     As_use = {ana.as_use:>8.2f} mm\u00b2 > As_min = {sd.get('as_min_lsd',0):>8.2f} mm\u00b2    \u2234 {status_min}")
-            srv.append("")
-            
-            # 2. Indirect Crack Control (Stress fs)
-            srv.append("  \u2461 간접균열제어")
-            srv.append(f"     사용 한계상태 모멘트 (Ms) = {sd.get('Ms_knm',0):>8.3f} kN.m")
-            fs_formula = "Ms / ( As \u00d7 ( d - c / 3 ) )"
-            fs_calc = f"{sd.get('Ms_knm',0)*1e3:.3f} / ( {ana.as_use:.1f} \u00d7 ( {ana.d_eff:.1f} - {sd.get('c_neutral',0):.1f} / 3 ) )"
-            srv.append(f"     fs = {fs_formula}")
-            srv.append(f"        = {fs_calc}")
-            srv.append(f"        = {sd.get('fs',0):>8.3f} MPa \u2264 fsa = 0.8 \u00d7 fy = {sd.get('fsa',0):.1f} MPa    \u2234 {'O.K' if sd.get('fs',0) <= sd.get('fsa',0) else 'N.G'}")
-            
-            srv.append(f"        n   : 탄성계수비 (Es / Ec)                              = {sd.get('n',0):.2f}")
-            srv.append(f"        \u03c1   : 철근비                                            = {sd.get('rho',0):.5f}")
-            srv.append(f"        k   : 중립축 비                                         = {sd.get('k_neutral',0):.5f}")
-            srv.append(f"        c   : 중립축 (kd)                                       = {sd.get('c_neutral',0):.1f} mm")
-            srv.append("")
-            
-            # 3. Max Bar Diameter check
-            srv.append(f"  \u2462 철근직경검토 (KDS 24 14 21, 표 4.2-4)")
-            dia_limit = sd.get('max_dia_limit', 0)
-            dia_use = ana.as_dia1
-            srv.append(f"     \u03a6_limit = {dia_limit:.1f} mm (fs = {sd.get('fs',0):.1f} MPa 기준)")
-            srv.append(f"     \u03a6_use = {dia_use:.0f} mm \u2264 \u03a6_limit = {dia_limit:.1f} mm    \u2234 {'O.K' if dia_use <= dia_limit else 'N.G'}")
-            srv.append("")
+            if sd.get('is_uncracked', False):
+                # UNCRACKED BRANCH DISPLAY (Matching User Snapshot)
+                srv.append("  가) 비균열 가정시 인장 연단 응력 (사용하중조합-I 적용)")
+                srv.append(f"     ft = Ms1 / Zb = Ms1 / ( b \u00d7 h\u00b2 / 6 )")
+                srv.append(f"        = {sd.get('Ms1_knm',0):.3f} / ( {ana.beam_b:.3f} \u00d7 {ana.beam_h:.3f}\u00b2 / 6 )")
+                srv.append(f"        = {sd.get('ft',0):.3f} MPa \u2264 fctm = {sd.get('fctm',0):.3f} MPa")
+                srv.append("     \u2192 비균열 단면이므로 균열검토 생략하며 응력 및 최소철근량만 검토")
+                srv.append("")
 
-            # 4. Spacing check
-            srv.append(f"  \u2463 철근 간격검토 (KDS 24 14 21, 표 4.2-5)")
-            sa_val = sd.get('sa_limit', 300.0)
-            s_table = sd.get('s_table_limit', 300.0)
-            srv.append(f"     Sa = min(3d, {s_table:.1f}) = {sa_val:.1f} mm")
-            s_use = ana.beam_b / ana.as_num1 if ana.as_num1 > 0 else 0
-            srv.append(f"     S = {ana.beam_b:.0f} / {ana.as_num1:.1f} EA = {s_use:>8.1f} mm \u2264 Sa = {sa_val:.1f} mm    \u2234 {'O.K' if s_use <= sa_val else 'N.G'}")
+                srv.append("  나) 응력 검토")
+                srv.append(f"     n = Es / Ec = {sd.get('n',0):.1f}")
+                srv.append(f"     c = [ b \u00d7 h\u00b2 / 2 + (n - 1) \u00d7 As \u00d7 d ] / [ b \u00d7 h + (n - 1) \u00d7 As ]")
+                as_total = ana.as_use
+                c_calc_upper = f"[ {ana.beam_b:.1f} \u00d7 {ana.beam_h:.1f}\u00b2 / 2 + ({sd.get('n',0):.1f} - 1) \u00d7 {as_total:.1f} \u00d7 {ana.d_eff:.1f} ]"
+                c_calc_lower = f"[ {ana.beam_b:.1f} \u00d7 {ana.beam_h:.1f} + ({sd.get('n',0):.1f} - 1) \u00d7 {as_total:.1f} ]"
+                srv.append(f"       = {c_calc_upper} / {c_calc_lower}")
+                srv.append(f"       = {sd.get('c_na',0):.2f} mm")
+                
+                srv.append(f"     I = b \u00d7 h\u00b3 / 12 + b \u00d7 h \u00d7 (c - h/2)\u00b2 + (n - 1) \u00d7 As \u00d7 (d - c)\u00b2")
+                # Convert inertia displayed internally to user friendly unit? Actually, lets just show result clearly.
+                srv.append(f"       = {sd.get('I_g',0):.4e} mm\u2074 ({sd.get('I_g',0)/1e12:.4f} m\u2074)")
+                srv.append("")
+                
+                # Concrete stress
+                srv.append("     - 콘크리트 연단에 발생하는 압축응력")
+                srv.append(f"       fc = Ms5 \u00d7 c / I")
+                srv.append(f"          = {sd.get('Ms5_knm',0):.3f} \u00d7 {sd.get('c_na',0):.2f} / {sd.get('I_g',0)/1e12:.3f}")
+                ok_fc = "O.K" if sd.get('fc',0) <= sd.get('fca',0) else "N.G"
+                srv.append(f"          = {sd.get('fc',0):.3f} MPa \u2264 0.6 fck = {sd.get('fca',0):.3f} MPa   \u2234 {ok_fc}")
+                srv.append("")
+
+                # Steel stress
+                srv.append("     - 철근에 발생하는 인장응력 (사용하중조합-I 적용)")
+                srv.append(f"       fs = n \u00d7 Ms1 \u00d7 (d - c) / I")
+                srv.append(f"          = {sd.get('n',0):.1f} \u00d7 {sd.get('Ms1_knm',0):.3f} \u00d7 ({ana.d_eff:.2f} - {sd.get('c_na',0):.2f}) / {sd.get('I_g',0)/1e12:.3f}")
+                ok_fs = "O.K" if sd.get('fs',0) <= sd.get('fsa',0) else "N.G"
+                srv.append(f"          = {sd.get('fs',0):.3f} MPa \u2264 0.8 fy = {sd.get('fsa',0):.3f} MPa   \u2234 {ok_fs}")
+                srv.append("")
+
+                # Minimum rebar check appended optionally for completeness as user requested
+                srv.append("  다) 최소철근량 검토")
+                as_min_formula = "kc \u00d7 k \u00d7 Act \u00d7 fct / fs"
+                as_min_calc = f"{sd.get('kc',0.4):.2f} \u00d7 {sd.get('k_scale',1.0):.2f} \u00d7 {sd.get('Act',0):.0f} \u00d7 {sd.get('fctm',0):.2f} / {ana.f_y:.0f}"
+                srv.append(f"     As_min = {as_min_calc} = {sd.get('as_min_lsd',0):>8.2f} mm\u00b2")
+                status_min = "O.K" if ana.as_use >= sd.get('as_min_lsd', 0) else "N.G"
+                srv.append(f"     As_use = {ana.as_use:>8.2f} mm\u00b2 > As_min = {sd.get('as_min_lsd',0):>8.2f} mm\u00b2    \u2234 {status_min}")
+            else:
+                # CRACKED BRANCH DISPLAY (LEGACY)
+                srv.append("  가) 인장 연단 응력 검토 (사용하중조합-I 적용)")
+                srv.append(f"     ft = Ms1 / Zb = {sd.get('Ms1_knm',0):.3f} / Zb = {sd.get('ft',0):.3f} MPa > fctm = {sd.get('fctm',0):.3f} MPa")
+                srv.append("     \u2192 균열 단면이므로 균열 및 철근간격 검토를 수행합니다.")
+                srv.append("")
+
+                # 1. Min Rebar
+                srv.append("  \u2460 최소철근량 검토")
+                as_min_formula = "kc \u00d7 k \u00d7 Act \u00d7 fct / fs"
+                as_min_calc = f"{sd.get('kc',0.4):.2f} \u00d7 {sd.get('k_scale',1.0):.2f} \u00d7 {sd.get('Act',0):.0f} \u00d7 {sd.get('fctm',0):.2f} / {ana.f_y:.0f}"
+                srv.append(f"     As_min = {as_min_formula}")
+                srv.append(f"            = {as_min_calc} = {sd.get('as_min_lsd',0):>8.2f} mm\u00b2")
+                
+                srv.append(f"        kc  : 균열발생 직전의 단면 내 응력 분포 상태를 반영하는 계수 = {sd.get('kc',0.4):.2f}")
+                srv.append(f"        k   : 부등 분포하는 응력의 영향을 반영하는 계수          = {sd.get('k_scale',1.0):.2f}")
+                srv.append(f"        Act : 첫 균열발생 직전 상태의 콘크리트 인장영역 단면적    = {sd.get('Act',0):.0f} mm\u00b2")
+                
+                status_min = "O.K" if ana.as_use >= sd.get('as_min_lsd', 0) else "N.G"
+                srv.append(f"     As_use = {ana.as_use:>8.2f} mm\u00b2 > As_min = {sd.get('as_min_lsd',0):>8.2f} mm\u00b2    \u2234 {status_min}")
+                srv.append("")
+                
+                # 2. Indirect Crack Control (Stress fs)
+                srv.append("  \u2461 간접균열제어")
+                srv.append(f"     사용 하중조합-I 모멘트 (Ms1) = {sd.get('Ms1_knm',0):>8.3f} kN.m")
+                # Explicit intermediate steps requested by user
+                srv.append(f"     n   = Es / Ec = {sd.get('n',0):.2f}")
+                srv.append(f"     \u03c1   = As / ( b \u00d7 d ) = {sd.get('rho',0):.6f}")
+                srv.append(f"     k   = \u221a ( ( n \u00d7 \u03c1 )\u00b2 + 2 \u00d7 n \u00d7 \u03c1 ) - n \u00d7 \u03c1 = {sd.get('k_neutral',0):.4f}")
+                srv.append(f"     c   = k \u00d7 d = {sd.get('k_neutral',0):.4f} \u00d7 {ana.d_eff:.1f} = {sd.get('c_neutral',0):.2f} mm")
+                srv.append("")
+                fs_formula = "Ms1 / ( As \u00d7 ( d - c / 3 ) )"
+                fs_calc = f"{sd.get('Ms1_knm',0):.3f} \u00d7 10\u2076 / ( {ana.as_use:.1f} \u00d7 ( {ana.d_eff:.1f} - {sd.get('c_neutral',0):.1f} / 3 ) )"
+                srv.append(f"     fs  = {fs_formula}")
+                srv.append(f"         = {fs_calc}")
+                srv.append(f"         = {sd.get('fs',0):>8.3f} MPa \u2264 fsa = 0.8 \u00d7 fy = {sd.get('fsa',0):.1f} MPa    \u2234 {'O.K' if sd.get('fs',0) <= sd.get('fsa',0) else 'N.G'}")
+                srv.append("")
+                
+                # 3. Max Bar Diameter check
+                srv.append(f"  \u2462 철근직경검토 (KDS 24 14 21, 표 4.2-4)")
+                dia_limit = sd.get('max_dia_limit', 0)
+                dia_use = ana.as_dia1
+                srv.append(f"     \u03a6_limit = {dia_limit:.1f} mm (fs = {sd.get('fs',0):.1f} MPa 기준)")
+                srv.append(f"     \u03a6_use = {dia_use:.0f} mm \u2264 \u03a6_limit = {dia_limit:.1f} mm    \u2234 {'O.K' if dia_use <= dia_limit else 'N.G'}")
+                srv.append("")
+
+                # 4. Spacing check
+                srv.append(f"  \u2463 철근 간격검토 (표 5.8.5, fs = {sd.get('fs',0):.1f} MPa 기준)")
+                sa_val = sd.get('sa_limit', 300.0)
+                s_table = sd.get('s_table_limit', 300.0)
+                srv.append(f"     Sa = {sa_val:.1f} mm")
+                s_use = ana.beam_b / ana.as_num1 if ana.as_num1 > 0 else 0
+                srv.append(f"     S = {ana.beam_b:.0f} / {ana.as_num1:.1f} EA = {s_use:>8.1f} mm \u2264 Sa = {sa_val:.1f} mm    \u2234 {'O.K' if s_use <= sa_val else 'N.G'}")
+            
             total.extend(srv)
 
         return {
